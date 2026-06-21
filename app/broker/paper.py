@@ -145,7 +145,7 @@ class PaperBroker(Broker):
 
     def check_sl_tp(self, asset: str, current_price: float) -> str | None:
         pos = self.positions.get(asset)
-        if pos is None:
+        if pos is None or current_price <= 0:
             return None
 
         if pos.side == "long":

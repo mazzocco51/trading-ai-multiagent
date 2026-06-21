@@ -112,6 +112,7 @@
   .v-long { background:var(--green-bg); color:var(--green); border-color:rgba(24,224,154,.3); }
   .v-short { background:var(--red-bg); color:var(--red); border-color:rgba(255,93,115,.3); }
   .v-neutral { background:rgba(255,255,255,.04); color:var(--faint); }
+  .why { font-size:11.5px; color:var(--muted); margin-top:10px; line-height:1.5; border-left:2px solid var(--ai-bg); padding-left:10px; }
 
   .act { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.02em; }
   .act.buy { background:var(--green-bg); color:var(--green); }
@@ -264,12 +265,16 @@ function consensus(){
       const v = vmap[ag];
       const sig = v? v.signal : "neutral";
       const cf = v? Math.round(v.confidence*100) : 0;
-      return `<div class="vote v-${sig}" title="${ag}: ${sig} ${cf}%">${ALABEL[ag]}<small>${cf}%</small></div>`;
+      const why = v && v.rationale ? v.rationale.replace(/"/g,"'") : "no data";
+      return `<div class="vote v-${sig}" title="${ag.toUpperCase()} · ${sig} ${cf}% — ${why}">${ALABEL[ag]}<small>${cf}%</small></div>`;
     }).join("");
+    const reason = (d.veto && d.veto_reason) ? d.veto_reason : (d.combined_rationale||"");
+    const safe = reason.replace(/</g,"&lt;").replace(/>/g,"&gt;");
     return `<div class="decision">
       <div class="drow"><span class="asset">${a}</span><span class="act ${act}">${lbl}</span></div>
       <div class="conv"><div class="bar"><i style="width:${conv}%"></i></div><span class="pct">${conv}%</span></div>
       <div class="votes">${votes}</div>
+      ${safe?`<div class="why">${safe}</div>`:''}
     </div>`;
   }).join("");
 }
