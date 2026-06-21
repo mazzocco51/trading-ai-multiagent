@@ -16,6 +16,7 @@ from app.agents.technical import TechnicalAgent
 from app.broker.base import Broker
 from app.config import Settings
 from app.data.context import build_context
+from app.explain import explain_cycle
 from app.persistence.repo import save_decision, save_equity_snapshot
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,14 @@ def run_cycle(
                     logger.info("SL/TP triggered for %s: %s", asset, triggered)
             except Exception as exc:
                 logger.warning("check_sl_tp failed for %s: %s", asset, exc)
+
+        # ------------------------------------------------------------------ #
+        # 6b. Human-readable, plain-Italian explanation of what just happened
+        # ------------------------------------------------------------------ #
+        try:
+            print(explain_cycle(asset, mark_price, views, idea, order, broker.get_balance()))
+        except Exception as exc:
+            logger.warning("explain_cycle failed for %s: %s", asset, exc)
 
         # ------------------------------------------------------------------ #
         # 7. Persist decision and equity snapshot

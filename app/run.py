@@ -36,6 +36,10 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # Quiet noisy third-party loggers so the plain-Italian explanation stands out.
+    for noisy in ("httpx", "cmdstanpy", "prophet", "prophet.plot"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--loop", action="store_true", help="Run continuously")
     parser.add_argument(
