@@ -5,9 +5,21 @@ on:
     - cron: '0 * * * *'   # every hour
   workflow_dispatch:        # manual trigger
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   trade:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,3 +36,16 @@ jobs:
           WHALE_ALERT_API_KEY: ${{ secrets.WHALE_ALERT_API_KEY }}
           CRYPTOPANIC_API_KEY: ${{ secrets.CRYPTOPANIC_API_KEY }}
         run: python -m app.run
+      - name: Build dashboard HTML
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m dashboard.build_html
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
