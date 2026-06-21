@@ -1,10 +1,11 @@
 # 🤖 Trading AI Multi-Agent
 
+[![CI](https://github.com/mazzocco51/trading-ai-multiagent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mazzocco51/trading-ai-multiagent/actions/workflows/ci.yml)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
 ![License MIT](https://img.shields.io/badge/License-MIT-green)
-![CI](https://github.com/mazzocco51/trading-ai-multiagent/actions/workflows/ci.yml/badge.svg)
 ![Paper Trading Only](https://img.shields.io/badge/Trading-Paper%20Only-orange)
 ![Stack: 100% Free](https://img.shields.io/badge/Stack-100%25%20Free-brightgreen)
+![Built with Claude Code + Pi Agent](https://img.shields.io/badge/Built%20with-Claude%20Code%20%2B%20Pi%20Agent-D97757)
 
 > A team of AI agents that analyses **BTC, ETH and SOL** every hour, debates the market, and places **simulated** paper trades — built as a computer-science portfolio project, not to make money.
 
