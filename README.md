@@ -1,4 +1,4 @@
-# 🤖 Trading AI Multi-Agent
+# Trading AI Multi-Agent
 
 [![CI](https://github.com/mazzocco51/trading-ai-multiagent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mazzocco51/trading-ai-multiagent/actions/workflows/ci.yml)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
@@ -17,9 +17,9 @@ It runs on a **100% free stack** (free LLM tiers, free database, free hosting) a
 
 Beyond the trading idea, this project was a hands-on playground for **agentic software engineering** — and that practice is as much the point as the bot itself:
 
-- 🛠️ **Practising with terminal coding agents** — most of this codebase was built by driving **Claude Code** and **[Pi Agent](https://github.com/badlogic/pi-mono)**, learning how to plan, prompt, supervise and debug autonomous coding agents on a real multi-file project.
-- 🧠 **Multi-agent programming, in both senses** — *writing* agents (the five specialist trading agents that reason and vote) **and** *orchestrating* them with tools that **spawn sub-agents** to parallelise the work.
-- 🆓 **Zero-cost engineering** — delivering a complete, tested, CI-backed system using only free tiers.
+- **Practising with terminal coding agents** — most of this codebase was built by driving **Claude Code** and **[Pi Agent](https://github.com/badlogic/pi-mono)**, learning how to plan, prompt, supervise and debug autonomous coding agents on a real multi-file project.
+- **Multi-agent programming, in both senses** — *writing* agents (the five specialist trading agents that reason and vote) **and** *orchestrating* them with tools that **spawn sub-agents** to parallelise the work.
+- **Zero-cost engineering** — delivering a complete, tested, CI-backed system using only free tiers.
 
 The trading bot is the vehicle; the underlying goal was learning how to architect and supervise **systems of autonomous agents**.
 
@@ -27,16 +27,30 @@ The trading bot is the vehicle; the underlying goal was learning how to architec
 
 ## What it does
 
-- 🧠 **Five specialist AI agents** look at different things — chart indicators, a price forecast, market mood, whale movements, and news — and each casts a weighted vote.
-- ⚖️ A **Portfolio Manager** merges the votes; a **Risk Manager** (plain Python, not AI) enforces stop-loss, take-profit and exposure limits before anything is executed.
-- 📝 Every cycle prints a **plain-language explanation** of what the agents thought and why it traded or stayed flat.
-- 📊 A **Streamlit dashboard** shows the equity curve, open positions and the full reasoning behind each decision.
+- **Five specialist AI agents** look at different things — chart indicators, a price forecast, market mood, whale movements, and news — and each casts a weighted vote.
+- A **Portfolio Manager** merges the votes; a **Risk Manager** (plain Python, not AI) enforces stop-loss, take-profit and exposure limits before anything is executed.
+- Every cycle prints a **plain-language explanation** of what the agents thought and why it traded or stayed flat.
+- A **Streamlit dashboard** shows the equity curve, open positions and the full reasoning behind each decision.
 
-> 💡 Why a *team* of agents instead of one? Because each specialist gets a small, focused prompt (fewer mistakes), a broken data source only weakens one agent instead of the whole system, and the safety limits live in deterministic code the AI can't talk its way around.
+> Why a *team* of agents instead of one? Because each specialist gets a small, focused prompt (fewer mistakes), a broken data source only weakens one agent instead of the whole system, and the safety limits live in deterministic code the AI can't talk its way around.
 
 ---
 
-## 📖 Full guide
+## The five specialist agents
+
+Each agent looks at one slice of reality and gives a simple opinion — **up, down, or neutral** — plus how confident it is. None of them sees the whole picture alone; the Portfolio Manager combines them.
+
+| Agent | What it looks at | In plain words |
+|---|---|---|
+| **Technical** | Price-chart indicators (MACD, RSI, pivot levels) | Reads the shape of the recent price chart: is it trending up, down, or stretched too far in one direction? |
+| **Forecast** | A statistical time-series model (Prophet) | Projects where the price is likely to go next — and admits how uncertain that guess is. |
+| **Sentiment** | The Fear & Greed Index | Gauges the market's mood. When everyone is fearful it often leans the opposite way ("buy when others panic"). |
+| **On-chain** | Large wallet transfers ("whales") | Watches whether the biggest players are moving money in to buy or out to sell. |
+| **News** | Recent crypto headlines | Flags whether the latest news looks risky or reassuring. |
+
+---
+
+## Full guide
 
 This README is the quick overview. **For the detailed explanation — how decisions are made, the voting math, setup, deployment and more, written so that even a non-trader can follow — see:**
 

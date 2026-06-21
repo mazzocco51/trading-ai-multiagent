@@ -75,6 +75,22 @@ class AgentViewLog(Base):
     )
 
 
+class BrokerState(Base):
+    """Single-row table holding the serialised PaperBroker state (JSON).
+
+    Lets the portfolio (balance + open positions) persist across separate
+    process runs — e.g. the hourly GitHub Actions cron.
+    """
+
+    __tablename__ = "broker_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    state_json: Mapped[str]
+    updated_at: Mapped[str] = mapped_column(
+        default=lambda: datetime.now(tz=UTC).isoformat()
+    )
+
+
 def init_db(database_url: str):
     """Create all tables and return the engine."""
     from sqlalchemy import Engine

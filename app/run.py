@@ -15,6 +15,7 @@ from app.llm.providers.groq import GroqProvider
 from app.llm.providers.openrouter import OpenRouterProvider
 from app.orchestrator import run_cycle
 from app.persistence.models import init_db
+from app.persistence.repo import load_broker_state, save_broker_state
 
 
 def build_gateway() -> LLMGateway:
@@ -61,9 +62,17 @@ def main() -> None:
 
     _log = logging.getLogger(__name__)
 
+    # Restore balance + open positions from a previous run (perpetual cron).
+    with SessionFactory() as session:
+        state = load_broker_state(session)
+        if state:
+            broker.load_state(state)
+            _log.info("Restored broker state: balance=%.2f", broker.get_balance())
+
     while True:
         with SessionFactory() as session:
             results = run_cycle(settings, broker, gateway, session)
+            save_broker_state(session, broker.export_state())
             session.commit()
 
         for r in results:

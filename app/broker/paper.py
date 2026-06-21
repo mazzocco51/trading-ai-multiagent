@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -29,6 +30,24 @@ class PaperBroker(Broker):
 
     def get_positions(self) -> list[Position]:
         return list(self.positions.values())
+
+    def export_state(self) -> dict:
+        """Serialise balance + open positions so state survives across runs."""
+        return {
+            "balance": self._balance,
+            "positions": {a: asdict(p) for a, p in self.positions.items()},
+            "trade_history": self.trade_history,
+        }
+
+    def load_state(self, state: dict) -> None:
+        """Restore a previously exported state (used by the perpetual cron)."""
+        if not state:
+            return
+        self._balance = float(state.get("balance", self._balance))
+        self.positions = {
+            a: Position(**p) for a, p in (state.get("positions") or {}).items()
+        }
+        self.trade_history = list(state.get("trade_history", []))
 
     def mark_price(self, asset: str) -> float:
         return self._mock_prices.get(asset, 0.0)

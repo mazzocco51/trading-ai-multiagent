@@ -1,11 +1,35 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.agents.base import AgentView
-from app.persistence.models import AgentViewLog, Decision, EquitySnapshot
+from app.persistence.models import AgentViewLog, BrokerState, Decision, EquitySnapshot
+
+
+def load_broker_state(session: Session) -> dict | None:
+    """Return the persisted broker state (balance + positions), or None."""
+    row = session.get(BrokerState, 1)
+    if row is None:
+        return None
+    try:
+        return json.loads(row.state_json)
+    except Exception:
+        return None
+
+
+def save_broker_state(session: Session, state: dict) -> None:
+    """Upsert the single broker-state row with the latest serialised state."""
+    payload = json.dumps(state)
+    now = datetime.now(tz=UTC).isoformat()
+    row = session.get(BrokerState, 1)
+    if row is None:
+        session.add(BrokerState(id=1, state_json=payload, updated_at=now))
+    else:
+        row.state_json = payload
+        row.updated_at = now
 
 
 def save_decision(
