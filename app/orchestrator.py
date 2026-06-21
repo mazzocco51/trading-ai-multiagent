@@ -33,7 +33,7 @@ def run_cycle(
     Returns a list of result dicts — one per asset — with keys:
     ``asset``, ``action``, ``veto``, ``veto_reason``, ``balance``.
     """
-    equity_start_of_day = broker.get_balance()
+    equity_start_of_day = broker.get_equity()
     results: list[dict] = []
 
     for asset in settings.assets:

@@ -53,7 +53,7 @@ _AGENT_SENTENCE = {
 _SIGNAL_IT = {"long": "RIALZO", "short": "RIBASSO", "neutral": "NEUTRO"}
 
 
-def _agent_line(view: "AgentView") -> str:
+def _agent_line(view: AgentView) -> str:
     label = _AGENT_LABEL.get(view.agent, view.agent.capitalize())
     sentence = _AGENT_SENTENCE.get(view.agent, {}).get(
         view.signal, view.rationale[:90]
@@ -66,9 +66,9 @@ def _agent_line(view: "AgentView") -> str:
 def explain_cycle(
     asset: str,
     mark_price: float,
-    views: list["AgentView"],
-    idea: "TradeIdea",
-    order: "ValidatedOrder",
+    views: list[AgentView],
+    idea: TradeIdea,
+    order: ValidatedOrder,
     balance: float,
 ) -> str:
     """Return a plain-Italian block explaining what happened for one asset."""

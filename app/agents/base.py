@@ -22,13 +22,21 @@ class AgentView(BaseModel):
     def clamp_confidence(cls, v: float) -> float:
         return max(0.0, min(1.0, v))
 
-    @field_validator("signal")
+    @field_validator("signal", mode="before")
     @classmethod
-    def validate_signal(cls, v: str) -> str:
+    def validate_signal(cls, v: object) -> str:
+        # Map common LLM phrasings to the canonical labels.
+        synonyms = {
+            "bullish": "long", "buy": "long", "up": "long", "positive": "long",
+            "bearish": "short", "sell": "short", "down": "short", "negative": "short",
+            "hold": "neutral", "flat": "neutral", "none": "neutral", "mixed": "neutral",
+        }
+        s = str(v).strip().lower()
+        s = synonyms.get(s, s)
         allowed = {"long", "short", "neutral"}
-        if v not in allowed:
+        if s not in allowed:
             raise ValueError(f"signal must be one of {allowed}, got {v!r}")
-        return v
+        return s
 
 
 class BaseAgent(ABC):

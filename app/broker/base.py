@@ -53,3 +53,10 @@ class Broker(ABC):
 
     @abstractmethod
     def mark_price(self, asset: str) -> float: ...
+
+    def get_equity(self) -> float:
+        """Total account value (cash + capital in open positions).
+
+        Defaults to cash balance; brokers that hold positions should override.
+        """
+        return self.get_balance()

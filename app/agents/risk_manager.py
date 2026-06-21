@@ -40,10 +40,10 @@ class RiskManager:
         if action in ("hold", "close"):
             return self._build_order(idea, action, 0.0, mark_price, veto=False)
 
-        # --- Kill-switch: daily drawdown ---
-        current_balance = broker.get_balance()
+        # --- Kill-switch: daily drawdown (measured on equity, not just cash) ---
+        current_equity = broker.get_equity()
         if equity_start_of_day > 0:
-            daily_drawdown = (equity_start_of_day - current_balance) / equity_start_of_day
+            daily_drawdown = (equity_start_of_day - current_equity) / equity_start_of_day
             if daily_drawdown >= s.max_daily_drawdown_pct:
                 return self._build_order(
                     idea, action, 0.0, mark_price,

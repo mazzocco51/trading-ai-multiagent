@@ -31,6 +31,15 @@ class PaperBroker(Broker):
     def get_positions(self) -> list[Position]:
         return list(self.positions.values())
 
+    def get_equity(self) -> float:
+        """Cash plus the capital currently deployed in open positions.
+
+        Using equity (not just cash) means opening a position does NOT look
+        like a loss to the daily-drawdown kill-switch.
+        """
+        deployed = sum(p.size * p.entry_price for p in self.positions.values())
+        return self._balance + deployed
+
     def export_state(self) -> dict:
         """Serialise balance + open positions so state survives across runs."""
         return {
