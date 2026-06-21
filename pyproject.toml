@@ -20,7 +20,6 @@ dev = [
 data = [
     "ccxt>=4.0",
     "pandas>=2.0",
-    "pandas-ta>=0.3",
     "prophet>=1.1",
 ]
 llm = [
