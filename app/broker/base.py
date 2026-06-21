@@ -14,6 +14,7 @@ class Position:
     sl_price: float
     tp_price: float
     opened_at: str
+    size_pct: float = 0.0
 
 
 @dataclass

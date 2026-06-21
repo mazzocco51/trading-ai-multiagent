@@ -53,12 +53,12 @@ def compute_indicators(df: pd.DataFrame) -> dict:
         rsi_series = _rsi(close, 14)
 
         last = df.iloc[-1]
-        h, l, c = float(last["high"]), float(last["low"]), float(last["close"])
-        pivot = (h + l + c) / 3
-        r1 = 2 * pivot - l
+        h, lo, c = float(last["high"]), float(last["low"]), float(last["close"])
+        pivot = (h + lo + c) / 3
+        r1 = 2 * pivot - lo
         s1 = 2 * pivot - h
-        r2 = pivot + (h - l)
-        s2 = pivot - (h - l)
+        r2 = pivot + (h - lo)
+        s2 = pivot - (h - lo)
 
         def last_val(series: pd.Series) -> float | None:
             v = series.dropna()

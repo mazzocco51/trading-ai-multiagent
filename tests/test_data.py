@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from app.data.indicators import compute_indicators
 from app.data.news import get_news_headlines
@@ -64,7 +63,9 @@ def test_whale_no_key():
 
 
 def test_news_failure(monkeypatch):
-    monkeypatch.setattr("httpx.get", lambda *a, **kw: (_ for _ in ()).throw(Exception("conn error")))
+    monkeypatch.setattr(
+        "httpx.get", lambda *a, **kw: (_ for _ in ()).throw(Exception("conn error"))
+    )
     result = get_news_headlines("BTC/USDT")
     assert result == []
 

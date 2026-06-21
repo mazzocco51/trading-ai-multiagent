@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Optional
-
 from pydantic import BaseModel
 
+from app.data.forecast import get_forecast
 from app.data.indicators import compute_indicators
 from app.data.news import get_news_headlines
 from app.data.prices import get_ohlcv
@@ -16,6 +15,7 @@ class MarketContext(BaseModel):
     timeframe: str
     ohlcv: list[dict] = []
     indicators: dict = {}
+    forecast: dict = {}
     fear_and_greed: dict = {}
     whale_events: list = []
     news_headlines: list = []
@@ -45,6 +45,19 @@ def build_context(asset: str, timeframe: str, whale_api_key: str = "") -> Market
         ctx.indicators = compute_indicators(df_for_ind)
     except Exception:
         ctx.degraded_sources.append("indicators")
+
+    try:
+        import pandas as pd
+
+        df_for_fc = (
+            pd.DataFrame(ctx.ohlcv).set_index("timestamp") if ctx.ohlcv else pd.DataFrame()
+        )
+        ctx.forecast = get_forecast(asset, timeframe, df_for_fc)
+        if ctx.forecast.get("degraded"):
+            ctx.degraded_sources.append("forecast")
+    except Exception:
+        ctx.forecast = {"degraded": True}
+        ctx.degraded_sources.append("forecast")
 
     try:
         fng = get_fear_and_greed()

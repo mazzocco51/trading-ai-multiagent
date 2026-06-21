@@ -10,7 +10,7 @@ from app.llm.providers.base import BaseLLMProvider, LLMResponse
 class GeminiProvider(BaseLLMProvider):
     name = "gemini"
 
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
         self.api_key = api_key
         self.model = model
 
@@ -20,13 +20,15 @@ class GeminiProvider(BaseLLMProvider):
     def complete(self, system: str, user: str) -> LLMResponse:
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent?key={self.api_key}"
+            f"{self.model}:generateContent"
         )
+        # Send the key in a header (NOT the URL) so it never lands in logs.
+        headers = {"x-goog-api-key": self.api_key}
         body = {
             "contents": [{"parts": [{"text": system + "\n\n" + user}]}],
             "generationConfig": {"responseMimeType": "application/json"},
         }
-        resp = httpx.post(url, json=body, timeout=30)
+        resp = httpx.post(url, headers=headers, json=body, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         content = data["candidates"][0]["content"]["parts"][0]["text"]

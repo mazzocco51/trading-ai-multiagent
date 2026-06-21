@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from app.broker.base import Broker, OrderResult, Position
@@ -74,7 +74,8 @@ class PaperBroker(Broker):
             entry_price=fill_price,
             sl_price=sl_price,
             tp_price=tp_price,
-            opened_at=datetime.now(tz=timezone.utc).isoformat(),
+            opened_at=datetime.now(tz=UTC).isoformat(),
+            size_pct=size_pct,
         )
         return OrderResult(
             success=True,
@@ -109,7 +110,7 @@ class PaperBroker(Broker):
                 "exit_price": mark_price,
                 "size": pos.size,
                 "pnl": pnl,
-                "closed_at": datetime.now(tz=timezone.utc).isoformat(),
+                "closed_at": datetime.now(tz=UTC).isoformat(),
             }
         )
         return True

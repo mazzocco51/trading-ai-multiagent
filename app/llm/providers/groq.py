@@ -40,5 +40,9 @@ class GroqProvider(BaseLLMProvider):
         except Exception:
             parsed = {}
         return LLMResponse(
-            provider=self.name, model=self.model, content=content, parsed=parsed, tokens_used=tokens_used
+            provider=self.name,
+            model=self.model,
+            content=content,
+            parsed=parsed,
+            tokens_used=tokens_used,
         )

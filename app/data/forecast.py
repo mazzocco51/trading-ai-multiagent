@@ -32,16 +32,26 @@ def get_forecast(asset: str, timeframe: str, ohlcv_df: pd.DataFrame) -> dict:
 
         # MAE on test set
         test_preds = forecast.set_index("ds").loc[test["ds"], "yhat"]
-        mae = float((test["y"].values - test_preds.values).__abs__().mean()) if len(test_preds) == len(test) else None
+        if len(test_preds) == len(test):
+            mae: float | None = float(
+                (test["y"].values - test_preds.values).__abs__().mean()
+            )
+        else:
+            mae = None
 
         last_close = float(df_prophet["y"].iloc[-1])
         next_pred = float(forecast["yhat"].iloc[-1])
         move_pct = (next_pred - last_close) / last_close
 
+        if mae is None:
+            confidence = 0.6
+        else:
+            confidence = max(0.1, min(0.9, 1 - abs(mae) / (last_close + 1e-9)))
+
         return {
             "expected_move_pct": round(move_pct, 6),
             "direction": "up" if move_pct > 0 else "down",
-            "confidence": 0.6 if mae is None else max(0.1, min(0.9, 1 - abs(mae) / (last_close + 1e-9))),
+            "confidence": confidence,
             "mae": mae,
             "degraded": False,
         }

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     )
 
     # Market
-    assets: List[str] = Field(default=["BTC/USDT", "ETH/USDT", "SOL/USDT"])
+    assets: Annotated[list[str], NoDecode] = Field(default=["BTC/USDT", "ETH/USDT", "SOL/USDT"])
     timeframe: str = Field(default="1h")
 
     # Broker
@@ -25,9 +25,11 @@ class Settings(BaseSettings):
     paper_slippage_pct: float = Field(default=0.0005)
 
     # LLM gateway — ordered list of providers to try
-    llm_provider_order: List[str] = Field(default=["gemini", "groq", "openrouter"])
+    llm_provider_order: Annotated[list[str], NoDecode] = Field(
+        default=["gemini", "groq", "openrouter"]
+    )
     gemini_api_key: str = Field(default="")
-    gemini_model: str = Field(default="gemini-2.0-flash")
+    gemini_model: str = Field(default="gemini-2.5-flash")
     groq_api_key: str = Field(default="")
     groq_model: str = Field(default="llama-3.3-70b-versatile")
     openrouter_api_key: str = Field(default="")
@@ -63,6 +65,27 @@ class Settings(BaseSettings):
 
     # CryptoPanic
     cryptopanic_api_key: str = Field(default="")
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _default_db(cls, v: object) -> object:
+        """Empty DATABASE_URL falls back to a local SQLite file (dev mode)."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "sqlite:///./paper_trading.db"
+        return v
+
+    @field_validator("assets", "llm_provider_order", mode="before")
+    @classmethod
+    def _split_csv(cls, v: object) -> object:
+        """Accept comma-separated env values (e.g. BTC/USDT,ETH/USDT) or JSON lists."""
+        if isinstance(v, str):
+            s = v.strip()
+            if s.startswith("["):
+                import json
+
+                return json.loads(s)
+            return [item.strip() for item in s.split(",") if item.strip()]
+        return v
 
 
 settings = Settings()
