@@ -81,17 +81,27 @@ def explain_cycle(
     else:
         out.append("  (nessun analista disponibile in questo ciclo)")
 
+    n_long = sum(1 for v in views if v.signal == "long")
+    n_short = sum(1 for v in views if v.signal == "short")
+    n_neutral = sum(1 for v in views if v.signal == "neutral")
     conv = int(round(idea.conviction * 100))
     out.append("")
-    out.append(f"Decisione del gestore: convinzione {conv}% →")
+    out.append(
+        f"Voti: {n_long} RIALZO · {n_short} RIBASSO · {n_neutral} NEUTRO  "
+        f"→ convinzione pesata {conv}%"
+    )
+    out.append(
+        "  (ogni voto pesa per importanza dell'agente × sicurezza; "
+        "i NEUTRO valgono 0 e abbassano la media)"
+    )
 
     if order.veto:
         out.append(f"  🔴 OPERAZIONE BLOCCATA dal Risk Manager. Motivo: {order.veto_reason}")
         out.append(f"  Capitale invariato (saldo {balance:,.2f}).")
     elif order.action == "hold":
         out.append(
-            "  🟡 NESSUNA OPERAZIONE. I segnali non sono abbastanza forti o concordi: "
-            "il bot preferisce non rischiare e resta liquido."
+            f"  🟡 NESSUNA OPERAZIONE. La convinzione pesata ({conv}%) è sotto la soglia "
+            "che il gestore richiede per rischiare capitale: resta liquido."
         )
         out.append(f"  Saldo invariato: {balance:,.2f}.")
     elif order.action in ("open_long", "open_short"):

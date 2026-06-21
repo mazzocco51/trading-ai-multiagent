@@ -91,9 +91,9 @@ class PortfolioManagerAgent(BaseAgent):
             logger.warning("PortfolioManager LLM call failed (%s); using rule-based fallback", exc)
 
         # Rule-based fallback
-        if norm_score > 0.2:
+        if norm_score > 0.15:
             fb_action: Literal["open_long", "open_short", "close", "hold"] = "open_long"
-        elif norm_score < -0.2:
+        elif norm_score < -0.15:
             fb_action = "open_short"
         else:
             fb_action = "hold"
