@@ -2,7 +2,9 @@ name: trade-loop
 
 on:
   schedule:
-    - cron: '0 * * * *'   # every hour
+    # Off-peak minutes (GitHub heavily throttles on-the-hour crons).
+    # Twice an hour to raise the odds the schedule actually fires.
+    - cron: '13,43 * * * *'
   workflow_dispatch:        # manual trigger
 
 permissions:
