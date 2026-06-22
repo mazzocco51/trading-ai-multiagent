@@ -11,6 +11,8 @@
 
 It runs on a **100% free stack** (free LLM tiers, free database, free hosting) and **never touches real money**.
 
+**🔗 Live dashboard → https://mazzocco51.github.io/trading-ai-multiagent/** (auto-updated from the running bot)
+
 ---
 
 ## Why I built this
