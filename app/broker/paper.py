@@ -138,6 +138,7 @@ class PaperBroker(Broker):
                 "exit_price": mark_price,
                 "size": pos.size,
                 "pnl": pnl,
+                "opened_at": pos.opened_at,
                 "closed_at": datetime.now(tz=UTC).isoformat(),
             }
         )

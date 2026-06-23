@@ -180,6 +180,7 @@ const AGENTS = ["technical","forecast","sentiment","onchain","news"];
 const ALABEL = { technical:"TEC", forecast:"FOR", sentiment:"SEN", onchain:"CHN", news:"NWS" };
 const fmt = (n,d=2)=> (n==null||isNaN(n))?"—":Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 const usd = (n,d=2)=> (n==null||isNaN(n))?"—":"$"+fmt(n,d);
+const dt = (s)=> s ? new Date(s).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
 const live = {};
 
 function coins(){
@@ -262,7 +263,7 @@ function openTbl(){
   const rows = DATA.open_positions||[];
   const el = document.getElementById("openTable");
   if(!rows.length){ el.innerHTML = `<div class="empty">No open positions right now.</div>`; return; }
-  el.innerHTML = `<table><thead><tr><th>Asset</th><th>Side</th><th>Entry</th><th>Now</th><th>P&amp;L</th></tr></thead><tbody id="openBody"></tbody></table>`;
+  el.innerHTML = `<table><thead><tr><th>Asset</th><th>Side</th><th>Entry</th><th>Now</th><th>P&amp;L</th><th>Opened</th></tr></thead><tbody id="openBody"></tbody></table>`;
   paintOpen();
 }
 function paintOpen(){
@@ -276,18 +277,17 @@ function paintOpen(){
       const pct = (lp/p.entry_price-1)*100*dir;
       cell = `<span class="num ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}${usd(pnl)} (${pct>=0?'+':''}${fmt(pct)}%)</span>`;
     }
-    return `<tr><td class="asset">${p.asset}</td><td>${chip(p.side)}</td><td class="num">${usd(p.entry_price)}</td><td class="num">${lp!=null?usd(lp):'—'}</td><td>${cell}</td></tr>`;
+    return `<tr><td class="asset">${p.asset}</td><td>${chip(p.side)}</td><td class="num">${usd(p.entry_price)}</td><td class="num">${lp!=null?usd(lp):'—'}</td><td>${cell}</td><td style="color:var(--faint)">${dt(p.opened_at)}</td></tr>`;
   }).join("");
 }
 function closedTbl(){
   const rows = (DATA.closed_trades||[]).slice().reverse();
   const el = document.getElementById("closedTable");
   if(!rows.length){ el.innerHTML = `<div class="empty">No closed trades yet — the desk is warming up.</div>`; return; }
-  el.innerHTML = `<table><thead><tr><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>Closed</th></tr></thead><tbody>${
+  el.innerHTML = `<table><thead><tr><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>Opened</th><th>Closed</th></tr></thead><tbody>${
     rows.map(t=>{
       const cls=(t.pnl||0)>=0?'pos':'neg';
-      const w = t.closed_at?new Date(t.closed_at).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):'—';
-      return `<tr><td class="asset">${t.asset}</td><td>${chip(t.side)}</td><td class="num">${usd(t.entry_price)}</td><td class="num">${usd(t.exit_price)}</td><td class="num ${cls}">${(t.pnl||0)>=0?'+':''}${usd(t.pnl)}</td><td style="color:var(--faint)">${w}</td></tr>`;
+      return `<tr><td class="asset">${t.asset}</td><td>${chip(t.side)}</td><td class="num">${usd(t.entry_price)}</td><td class="num">${usd(t.exit_price)}</td><td class="num ${cls}">${(t.pnl||0)>=0?'+':''}${usd(t.pnl)}</td><td style="color:var(--faint)">${dt(t.opened_at)}</td><td style="color:var(--faint)">${dt(t.closed_at)}</td></tr>`;
     }).join("")}</tbody></table>`;
 }
 
