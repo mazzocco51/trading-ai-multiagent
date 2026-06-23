@@ -35,7 +35,13 @@ class PortfolioManagerAgent(BaseAgent):
     def analyze(self, ctx: MarketContext) -> AgentView:
         raise NotImplementedError("Use aggregate(views, asset, ctx) instead")
 
-    def aggregate(self, views: list[AgentView], asset: str, ctx: MarketContext) -> TradeIdea:
+    def aggregate(
+        self,
+        views: list[AgentView],
+        asset: str,
+        ctx: MarketContext,
+        open_position: dict | None = None,
+    ) -> TradeIdea:
         signal_map = {"long": 1.0, "short": -1.0, "neutral": 0.0}
         weighted_score = 0.0
         total_weight = 0.0
@@ -62,6 +68,7 @@ class PortfolioManagerAgent(BaseAgent):
             "weighted_signal_score": round(norm_score, 4),
             "agent_views": views_summary,
             "current_indicators": ctx.indicators,
+            "current_position": open_position,  # {"side","entry_price","unrealized_pct"} or null
         })
 
         try:
@@ -90,9 +97,15 @@ class PortfolioManagerAgent(BaseAgent):
         except Exception as exc:
             logger.warning("PortfolioManager LLM call failed (%s); using rule-based fallback", exc)
 
-        # Rule-based fallback
-        if norm_score > 0.15:
-            fb_action: Literal["open_long", "open_short", "close", "hold"] = "open_long"
+        # Rule-based fallback (position-aware)
+        held = (open_position or {}).get("side")
+        fb_action: Literal["open_long", "open_short", "close", "hold"]
+        if held == "long":
+            fb_action = "close" if norm_score < -0.10 else "hold"
+        elif held == "short":
+            fb_action = "close" if norm_score > 0.10 else "hold"
+        elif norm_score > 0.15:
+            fb_action = "open_long"
         elif norm_score < -0.15:
             fb_action = "open_short"
         else:

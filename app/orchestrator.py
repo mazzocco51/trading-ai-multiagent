@@ -80,19 +80,34 @@ def run_cycle(
                 )
 
         # ------------------------------------------------------------------ #
-        # 3. Portfolio Manager aggregates views into a TradeIdea
-        # ------------------------------------------------------------------ #
-        pm = PortfolioManagerAgent(gateway, settings.agent_weights)
-        idea = pm.aggregate(views, asset, ctx)
-
-        # ------------------------------------------------------------------ #
-        # 4. Derive mark price from context (fallback to broker)
+        # 3. Derive mark price first (needed for position context)
         # ------------------------------------------------------------------ #
         mark_price: float
         if ctx.ohlcv:
             mark_price = float(ctx.ohlcv[-1].get("close", 0.0))
         else:
             mark_price = broker.mark_price(asset)
+
+        # Current open position on this asset, passed to the manager so it can
+        # decide to take profit / close on a consensus flip (not only via SL/TP).
+        held = next((p for p in broker.get_positions() if p.asset == asset), None)
+        open_position: dict | None = None
+        if held is not None:
+            upnl = None
+            if mark_price > 0 and held.entry_price:
+                direction = 1.0 if held.side == "long" else -1.0
+                upnl = round((mark_price / held.entry_price - 1.0) * 100 * direction, 2)
+            open_position = {
+                "side": held.side,
+                "entry_price": held.entry_price,
+                "unrealized_pct": upnl,
+            }
+
+        # ------------------------------------------------------------------ #
+        # 4. Portfolio Manager aggregates views into a TradeIdea
+        # ------------------------------------------------------------------ #
+        pm = PortfolioManagerAgent(gateway, settings.agent_weights)
+        idea = pm.aggregate(views, asset, ctx, open_position=open_position)
 
         # ------------------------------------------------------------------ #
         # 5. Risk Manager validates / vetos the order
@@ -112,24 +127,27 @@ def run_cycle(
             if not order.veto:
                 if order.action in ("open_long", "open_short"):
                     side = "long" if order.action == "open_long" else "short"
-                    try:
-                        broker.place_order(
-                            asset,
-                            side,  # type: ignore[arg-type]
-                            order.size_pct,
-                            mark_price,
-                            order.sl_price,
-                            order.tp_price,
-                        )
-                        logger.info(
-                            "Placed %s order for %s size_pct=%.4f mark=%.4f",
-                            side,
-                            asset,
-                            order.size_pct,
-                            mark_price,
-                        )
-                    except Exception as exc:
-                        logger.error("place_order failed for %s: %s", asset, exc)
+                    if held is not None and held.side == side:
+                        logger.info("Already holding %s %s — no stacking", side, asset)
+                    else:
+                        try:
+                            broker.place_order(
+                                asset,
+                                side,  # type: ignore[arg-type]
+                                order.size_pct,
+                                mark_price,
+                                order.sl_price,
+                                order.tp_price,
+                            )
+                            logger.info(
+                                "Placed %s order for %s size_pct=%.4f mark=%.4f",
+                                side,
+                                asset,
+                                order.size_pct,
+                                mark_price,
+                            )
+                        except Exception as exc:
+                            logger.error("place_order failed for %s: %s", asset, exc)
 
                 elif order.action == "close":
                     positions = {p.asset: p for p in broker.get_positions()}
