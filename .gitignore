@@ -36,3 +36,9 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code worktrees and agent state
+.claude/
+
+# Generated dashboard output
+public/

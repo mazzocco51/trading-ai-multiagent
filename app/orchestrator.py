@@ -1,25 +1,37 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.agents.agent_selector import get_agents_for_asset_class, get_weights_for_asset_class
 from app.agents.base import AgentView
 from app.agents.forecast_agent import ForecastAgent
 from app.agents.news_agent import NewsAgent
 from app.agents.onchain import OnChainAgent
-from app.agents.portfolio_manager import PortfolioManagerAgent
+from app.agents.portfolio_manager import PortfolioManagerAgent, TradeIdea
 from app.agents.risk_manager import RiskManager
 from app.agents.sentiment_agent import SentimentAgent
 from app.agents.technical import TechnicalAgent
 from app.broker.base import Broker
 from app.config import Settings
+from app.data.asset_registry import AssetRegistry
 from app.data.context import build_context
+from app.data.stocks import get_stock_ohlcv, is_market_open
 from app.explain import explain_cycle
 from app.persistence.repo import save_decision, save_equity_snapshot
 
 logger = logging.getLogger(__name__)
+
+_AGENT_CLASS_MAP: dict[str, type] = {
+    "technical": TechnicalAgent,
+    "forecast": ForecastAgent,
+    "sentiment": SentimentAgent,
+    "onchain": OnChainAgent,
+    "news": NewsAgent,
+}
 
 
 def run_cycle(
@@ -35,15 +47,37 @@ def run_cycle(
     """
     equity_start_of_day = broker.get_equity()
     results: list[dict] = []
+    registry = AssetRegistry(settings)
 
     for asset in settings.assets:
         logger.info("Processing asset: %s", asset)
 
+        asset_class = registry.get_asset_class(asset)
+
         # ------------------------------------------------------------------ #
-        # 1. Build market context
+        # 0. Stock market-hours gate: skip when US equities are closed
         # ------------------------------------------------------------------ #
+        if asset_class == "stock" and not is_market_open():
+            logger.info("Market closed — skipping stock %s", asset)
+            results.append(
+                {
+                    "asset": asset,
+                    "action": "hold",
+                    "veto": True,
+                    "veto_reason": "US equity market is closed",
+                    "balance": broker.get_balance(),
+                }
+            )
+            continue
+
+        # ------------------------------------------------------------------ #
+        # 1. Build market context (route OHLCV source by asset class)
+        # ------------------------------------------------------------------ #
+        ohlcv_fn = get_stock_ohlcv if asset_class == "stock" else None
         try:
-            ctx = build_context(asset, settings.timeframe, settings.whale_alert_api_key)
+            ctx = build_context(
+                asset, settings.timeframe, settings.whale_alert_api_key, ohlcv_fn=ohlcv_fn
+            )
         except Exception as exc:
             logger.error("build_context failed for %s: %s", asset, exc)
             results.append(
@@ -58,15 +92,13 @@ def run_cycle(
             continue
 
         # ------------------------------------------------------------------ #
-        # 2. Run specialist agents (failures are non-fatal)
+        # 2. Run specialist agents filtered by asset class
         # ------------------------------------------------------------------ #
+        applicable_agent_names = get_agents_for_asset_class(asset_class)
         specialist_classes = [
-            TechnicalAgent,
-            ForecastAgent,
-            SentimentAgent,
-            OnChainAgent,
-            NewsAgent,
+            _AGENT_CLASS_MAP[n] for n in applicable_agent_names if n in _AGENT_CLASS_MAP
         ]
+        asset_weights = get_weights_for_asset_class(settings.agent_weights, asset_class)
 
         views: list[AgentView] = []
         for AgentCls in specialist_classes:
@@ -92,27 +124,55 @@ def run_cycle(
         # decide to take profit / close on a consensus flip (not only via SL/TP).
         held = next((p for p in broker.get_positions() if p.asset == asset), None)
         open_position: dict | None = None
+        force_close = False
         if held is not None:
             upnl = None
+            age_hours = 0.0
             if mark_price > 0 and held.entry_price:
                 direction = 1.0 if held.side == "long" else -1.0
                 upnl = round((mark_price / held.entry_price - 1.0) * 100 * direction, 2)
+            try:
+                opened_dt = datetime.fromisoformat(held.opened_at.replace("Z", "+00:00"))
+                age_hours = (datetime.now(UTC) - opened_dt).total_seconds() / 3600
+                if mark_price > 0 and age_hours >= settings.max_holding_hours:
+                    force_close = True
+                    logger.info(
+                        "Time-exit: %s held %.1fh >= %dh limit — forcing close",
+                        asset, age_hours, settings.max_holding_hours,
+                    )
+            except Exception as exc:
+                logger.debug("Could not parse opened_at for %s: %s", asset, exc)
             open_position = {
                 "side": held.side,
                 "entry_price": held.entry_price,
                 "unrealized_pct": upnl,
+                "opened_hours": round(age_hours, 1),
             }
 
         # ------------------------------------------------------------------ #
         # 4. Portfolio Manager aggregates views into a TradeIdea
         # ------------------------------------------------------------------ #
-        pm = PortfolioManagerAgent(gateway, settings.agent_weights)
+        pm = PortfolioManagerAgent(gateway, asset_weights)
         idea = pm.aggregate(views, asset, ctx, open_position=open_position)
 
         # ------------------------------------------------------------------ #
         # 5. Risk Manager validates / vetos the order
         # ------------------------------------------------------------------ #
         rm = RiskManager(settings)
+
+        if force_close:
+            idea = TradeIdea(
+                asset=asset,
+                action="close",
+                target_size_pct=0.0,
+                conviction=1.0,
+                combined_rationale=(
+                    f"Time-based exit: held {open_position['opened_hours']:.1f}h"
+                    f" >= {settings.max_holding_hours}h limit"
+                ),
+                agent_views_summary=[],
+            )
+
         order = rm.evaluate(idea, broker, mark_price, equity_start_of_day)
 
         # ------------------------------------------------------------------ #

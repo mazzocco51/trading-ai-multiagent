@@ -36,6 +36,7 @@
     background-color: var(--bg);
     background-image: radial-gradient(rgba(90,72,40,.05) 1px, transparent 1px);
     background-size: 24px 24px;
+    overflow-x: hidden;
   }
   .num { font-variant-numeric: tabular-nums; font-feature-settings:"tnum"; }
   h1,h2,h3 { margin:0; letter-spacing:-.01em; font-weight:600; }
@@ -43,10 +44,9 @@
 
   /* old-Macintosh CRT header */
   .crt-wrap { display:flex; justify-content:center; margin-bottom:24px; }
-  .monitor { background:#d9d2c2; border:2px solid #c9bca1; border-radius:20px; padding:16px 18px 20px; box-shadow:var(--sh-2); }
+  .monitor { background:#d9d2c2; border:2px solid #c9bca1; border-radius:20px; padding:16px 18px 20px; box-shadow:var(--sh-2); max-width:100%; }
   .screen { background:#c3c5b7; border:7px solid #1d1e1c; border-radius:16px; padding:20px 44px 22px; text-align:center; position:relative; overflow:hidden;
             box-shadow: inset 0 0 30px rgba(0,0,0,.30); }
-  /* CRT scanlines + grain */
   .screen::after { content:""; position:absolute; inset:0; pointer-events:none;
             background:
               repeating-linear-gradient(rgba(0,0,0,.10) 0 1px, transparent 1px 3px),
@@ -54,7 +54,7 @@
             mix-blend-mode:multiply; animation:flicker 5s infinite steps(60); }
   @keyframes flicker { 0%,100%{opacity:.92} 50%{opacity:1} 96%{opacity:.85} }
   .screen .content { animation:flicker 5s infinite steps(60); }
-  .screen h1 { font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:30px; line-height:1.05; letter-spacing:-.01em; color:#191a17;
+  .screen h1 { font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:clamp(1.1rem, 4vw, 1.875rem); line-height:1.15; letter-spacing:-.01em; color:#191a17;
             text-shadow: .7px 0 rgba(150,0,0,.22), -.7px 0 rgba(0,90,150,.22), 0 0 1px rgba(0,0,0,.25); filter:blur(.25px); }
   .screen .status { font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12px; letter-spacing:.07em; text-transform:uppercase; color:#33352e; margin-top:9px; display:inline-flex; align-items:center; gap:8px;
             text-shadow:.6px 0 rgba(150,0,0,.18), -.6px 0 rgba(0,90,150,.18); filter:blur(.2px); }
@@ -71,6 +71,7 @@
   .coin .pair { font-size:11px; color:rgba(255,255,255,.8); }
   .coin .price { font-size:24px; font-weight:700; }
   .coin .chg { font-size:12.5px; font-weight:600; color:rgba(255,255,255,.92); }
+  .asset-tag { display:inline-block; padding:1px 5px; border-radius:4px; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:rgba(255,255,255,.22); color:rgba(255,255,255,.9); margin-left:4px; vertical-align:middle; }
 
   .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px; }
   .card { background:var(--surface); border:2px solid #cdbfa4; border-radius:14px; box-shadow:var(--sh-1); }
@@ -80,7 +81,10 @@
   .kpi .sub { font-size:12px; color:var(--faint); margin-top:4px; }
 
   .layout { display:grid; grid-template-columns:1.55fr 1fr; gap:10px; align-items:start; }
-  .col-left { display:flex; flex-direction:column; gap:10px; }
+  .layout-equity    { grid-column:1; grid-row:1; }
+  .layout-consensus { grid-column:2; grid-row:1 / span 3; }
+  .layout-open      { grid-column:1; grid-row:2; }
+  .layout-closed    { grid-column:1; grid-row:3; }
   .panel { padding:17px 19px; }
   .panel h3 { font-size:15px; font-weight:600; }
   .panel .hint { font-size:12px; color:var(--muted); margin:3px 0 13px; }
@@ -94,8 +98,8 @@
   .bar { flex:1; height:7px; border-radius:99px; background:var(--surface-2); overflow:hidden; }
   .bar > i { display:block; height:100%; border-radius:99px; background:var(--ai); }
   .conv .pct { font-size:12px; font-weight:600; color:var(--ai); min-width:34px; text-align:right; }
-  .votes { display:flex; gap:6px; }
-  .vote { flex:1; height:30px; border-radius:8px; display:grid; place-items:center; font-size:9px; font-weight:700; letter-spacing:.04em; border:1px solid var(--line); }
+  .votes { display:flex; gap:6px; flex-wrap:wrap; }
+  .vote { flex:1; min-width:44px; height:30px; border-radius:8px; display:grid; place-items:center; font-size:9px; font-weight:700; letter-spacing:.04em; border:1px solid var(--line); }
   .vote small { font-size:8.5px; opacity:.8; }
   .v-long { background:var(--green-bg); color:var(--green); border-color:rgba(26,143,99,.25); }
   .v-short { background:var(--red-bg); color:var(--red); border-color:rgba(197,72,60,.25); }
@@ -121,8 +125,37 @@
   .asset { font-weight:600; }
   .empty { color:var(--faint); font-size:13.5px; padding:22px 4px; text-align:center; }
 
+  .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
   footer { margin-top:22px; font-size:12px; color:var(--faint); text-align:center; }
-  @media (max-width:880px){ .coins,.kpis{grid-template-columns:repeat(2,1fr)} .layout{grid-template-columns:1fr} }
+
+  /* ── 880px: 2-col → 1-col ─────────────────────────────────────────── */
+  @media (max-width:880px) {
+    .coins { grid-template-columns:repeat(2,1fr); }
+    .kpis  { grid-template-columns:repeat(2,1fr); }
+    .layout { grid-template-columns:1fr; }
+    .layout-equity    { order:1; }
+    .layout-consensus { order:2; }
+    .layout-open      { order:3; }
+    .layout-closed    { order:4; }
+  }
+
+  /* ── 560px: 1-col coins, reduced padding, tap targets ────────────── */
+  @media (max-width:560px) {
+    .wrap { padding:14px 10px 40px; }
+    .coins { grid-template-columns:1fr; }
+    .crt-wrap { margin-bottom:16px; }
+    .monitor { padding:10px 12px 14px; border-radius:14px; }
+    .screen  { padding:14px 18px 16px; border-radius:12px; }
+    button, a { min-height:40px; min-width:40px; }
+  }
+
+  /* ── 390px: smaller base font ────────────────────────────────────── */
+  @media (max-width:390px) {
+    body  { font-size:0.9rem; }
+    .kpi .val    { font-size:20px; }
+    .coin .price { font-size:20px; }
+  }
 </style>
 </head>
 <body>
@@ -141,28 +174,28 @@
   <div class="kpis" id="kpis"></div>
 
   <div class="layout">
-    <div class="col-left">
-      <div class="card panel">
-        <h3>Equity curve</h3>
-        <div class="hint">Account value over time · paper</div>
-        <div class="chart-box"><canvas id="equityChart"></canvas></div>
-      </div>
-      <div class="card panel">
-        <h3>Open positions</h3>
-        <div class="hint">Live unrealised P&amp;L vs current price</div>
-        <div id="openTable"></div>
-      </div>
-      <div class="card panel">
-        <h3>Recently closed</h3>
-        <div class="hint">Last trades the desk exited</div>
-        <div id="closedTable"></div>
-      </div>
+    <div class="card panel layout-equity">
+      <h3>Equity curve</h3>
+      <div class="hint">Account value over time · paper</div>
+      <div class="chart-box"><canvas id="equityChart"></canvas></div>
     </div>
 
-    <div class="card panel">
+    <div class="card panel layout-consensus">
       <h3>Agent consensus</h3>
-      <div class="hint">Latest decision per asset · 5-agent vote &amp; conviction</div>
+      <div class="hint">Latest decision per asset · agent vote &amp; conviction</div>
       <div id="consensus"></div>
+    </div>
+
+    <div class="card panel layout-open">
+      <h3>Open positions</h3>
+      <div class="hint">Live unrealised P&amp;L vs current price</div>
+      <div class="table-wrap" id="openTable"></div>
+    </div>
+
+    <div class="card panel layout-closed">
+      <h3>Recently closed</h3>
+      <div class="hint">Last trades the desk exited</div>
+      <div class="table-wrap" id="closedTable"></div>
     </div>
   </div>
 
@@ -171,10 +204,16 @@
 
 <script>
 const DATA = __DATA_JSON__;
+const ASSET_CLASS = DATA.asset_classes || {};
 const COIN = {
-  "BTC/USDT": { sym:"₿", name:"Bitcoin", c:"#f7941a", binance:"BTCUSDT" },
-  "ETH/USDT": { sym:"Ξ", name:"Ethereum", c:"#5e6ef5", binance:"ETHUSDT" },
-  "SOL/USDT": { sym:"◎", name:"Solana", c:"#11bf8d", binance:"SOLUSDT" },
+  "BTC/USDT": { sym:"₿", name:"Bitcoin",   c:"#f7941a", binance:"BTCUSDT" },
+  "ETH/USDT": { sym:"Ξ", name:"Ethereum",  c:"#5e6ef5", binance:"ETHUSDT" },
+  "SOL/USDT": { sym:"◎", name:"Solana",    c:"#11bf8d", binance:"SOLUSDT" },
+  "AAPL":     { sym:"",  name:"Apple",     c:"#555555", binance:"" },
+  "MSFT":     { sym:"⊞", name:"Microsoft", c:"#0078d4", binance:"" },
+  "GOOGL":    { sym:"G", name:"Alphabet",  c:"#4285f4", binance:"" },
+  "AMZN":     { sym:"a", name:"Amazon",    c:"#ff9900", binance:"" },
+  "TSLA":     { sym:"⚡", name:"Tesla",    c:"#cc0000", binance:"" },
 };
 const AGENTS = ["technical","forecast","sentiment","onchain","news"];
 const ALABEL = { technical:"TEC", forecast:"FOR", sentiment:"SEN", onchain:"CHN", news:"NWS" };
@@ -185,12 +224,16 @@ const live = {};
 
 function coins(){
   document.getElementById("coins").innerHTML = (DATA.assets||[]).map(a=>{
-    const m = COIN[a]||{sym:"•",name:a,c:"#888",binance:""};
+    const m = COIN[a]||{sym:a.slice(0,3).toUpperCase(),name:a,c:"#888",binance:""};
+    const cls = ASSET_CLASS[a] || "crypto";
+    const isCrypto = cls === "crypto" && m.binance;
+    const pid = isCrypto ? "p-"+m.binance : "p-stock-"+a.replace(/\//g,"-");
+    const cid = isCrypto ? "c-"+m.binance : "c-stock-"+a.replace(/\//g,"-");
     return `<div class="coin" style="background:${m.c}">
       <div class="top"><div class="sym">${m.sym}</div>
-        <div><div class="name">${m.name}</div><div class="pair">${a}</div></div></div>
-      <div class="price num" id="p-${m.binance}">—</div>
-      <div class="chg num" id="c-${m.binance}">loading…</div>
+        <div><div class="name">${m.name}<span class="asset-tag">${cls}</span></div><div class="pair">${a}</div></div></div>
+      <div class="price num" id="${pid}">—</div>
+      <div class="chg num" id="${cid}">${isCrypto?'loading…':'last close · no live feed'}</div>
     </div>`;
   }).join("");
 }
@@ -241,7 +284,11 @@ function consensus(){
     else if(d.action==="open_short"){ act="sell"; lbl="SHORT"; }
     else if(d.action==="close"){ act="sell"; lbl="CLOSE"; }
     const vmap={}; (d.agent_views||[]).forEach(v=>vmap[v.agent]=v);
-    const votes = AGENTS.map(ag=>{
+    const cls = ASSET_CLASS[a] || "crypto";
+    const applicableAgents = cls === "stock"
+      ? AGENTS.filter(ag => ag !== "onchain" && ag !== "sentiment")
+      : AGENTS;
+    const votes = applicableAgents.map(ag=>{
       const v = vmap[ag]; const sig = v? v.signal:"neutral"; const cf = v? Math.round(v.confidence*100):0;
       const why = v && v.rationale ? v.rationale.replace(/"/g,"'") : "no data";
       return `<div class="vote v-${sig}" title="${ag.toUpperCase()} · ${sig} ${cf}% — ${why}">${ALABEL[ag]}<small>${cf}%</small></div>`;
@@ -269,8 +316,10 @@ function openTbl(){
 function paintOpen(){
   const b = document.getElementById("openBody"); if(!b) return;
   b.innerHTML = (DATA.open_positions||[]).map(p=>{
-    const m = COIN[p.asset]; const lp = m?live[m.binance]:null;
-    let cell = `<span class="num" style="color:var(--faint)">—</span>`;
+    const m = COIN[p.asset];
+    const cls = ASSET_CLASS[p.asset] || "crypto";
+    const lp = (cls === "crypto" && m && m.binance) ? live[m.binance] : null;
+    let cell = `<span class="num" style="color:var(--faint)">${cls==="stock"?"market close":"—"}</span>`;
     if(lp!=null){
       const dir = p.side==='long'?1:-1;
       const pnl = (lp-p.entry_price)*dir*p.size;
@@ -286,13 +335,15 @@ function closedTbl(){
   if(!rows.length){ el.innerHTML = `<div class="empty">No closed trades yet — the desk is warming up.</div>`; return; }
   el.innerHTML = `<table><thead><tr><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>Opened</th><th>Closed</th></tr></thead><tbody>${
     rows.map(t=>{
-      const cls=(t.pnl||0)>=0?'pos':'neg';
-      return `<tr><td class="asset">${t.asset}</td><td>${chip(t.side)}</td><td class="num">${usd(t.entry_price)}</td><td class="num">${usd(t.exit_price)}</td><td class="num ${cls}">${(t.pnl||0)>=0?'+':''}${usd(t.pnl)}</td><td style="color:var(--faint)">${dt(t.opened_at)}</td><td style="color:var(--faint)">${dt(t.closed_at)}</td></tr>`;
+      const c=(t.pnl||0)>=0?'pos':'neg';
+      return `<tr><td class="asset">${t.asset}</td><td>${chip(t.side)}</td><td class="num">${usd(t.entry_price)}</td><td class="num">${usd(t.exit_price)}</td><td class="num ${c}">${(t.pnl||0)>=0?'+':''}${usd(t.pnl)}</td><td style="color:var(--faint)">${dt(t.opened_at)}</td><td style="color:var(--faint)">${dt(t.closed_at)}</td></tr>`;
     }).join("")}</tbody></table>`;
 }
 
 async function loadLive(){
-  const syms = (DATA.assets||[]).map(a=>COIN[a]?.binance).filter(Boolean);
+  const syms = (DATA.assets||[])
+    .filter(a => (ASSET_CLASS[a]||"crypto") === "crypto")
+    .map(a=>COIN[a]?.binance).filter(Boolean);
   if(!syms.length) return;
   try{
     const url = "https://api.binance.com/api/v3/ticker/24hr?symbols="+encodeURIComponent(JSON.stringify(syms));

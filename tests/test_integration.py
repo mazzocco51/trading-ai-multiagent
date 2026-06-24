@@ -271,6 +271,45 @@ class TestOrchestrator:
         )
         return gw
 
+    def test_orchestrator_stock_cycle(self):
+        """Stock asset is processed when market is open; crypto-only agents skipped."""
+        session = self._make_session()
+        settings = Settings(
+            assets=["AAPL"],
+            asset_classes=["AAPL:stock"],
+        )
+        broker = PaperBroker(10_000)
+        gateway = self._make_gateway()
+
+        dummy_ctx = MarketContext(asset="AAPL", timeframe="1h")
+
+        with (
+            patch("app.orchestrator.build_context", return_value=dummy_ctx),
+            patch("app.orchestrator.is_market_open", return_value=True),
+        ):
+            results = run_cycle(settings, broker, gateway, session)
+
+        assert len(results) == 1
+        assert results[0]["asset"] == "AAPL"
+        assert "action" in results[0]
+
+    def test_orchestrator_stock_market_closed(self):
+        """Stock asset skipped with veto when market is closed."""
+        session = self._make_session()
+        settings = Settings(
+            assets=["AAPL"],
+            asset_classes=["AAPL:stock"],
+        )
+        broker = PaperBroker(10_000)
+        gateway = self._make_gateway()
+
+        with patch("app.orchestrator.is_market_open", return_value=False):
+            results = run_cycle(settings, broker, gateway, session)
+
+        assert len(results) == 1
+        assert results[0]["veto"] is True
+        assert "closed" in results[0]["veto_reason"].lower()
+
     def test_orchestrator_single_cycle(self):
         session = self._make_session()
         settings = self._make_settings()

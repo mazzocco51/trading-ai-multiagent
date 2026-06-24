@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Market
     assets: Annotated[list[str], NoDecode] = Field(default=["BTC/USDT", "ETH/USDT", "SOL/USDT"])
     timeframe: str = Field(default="1h")
+    # Asset class per symbol — format: "BTC/USDT:crypto,AAPL:stock"
+    asset_classes: Annotated[list[str], NoDecode] = Field(default=[])
 
     # Broker
     broker: Literal["paper", "hyperliquid_testnet"] = Field(default="paper")
@@ -48,6 +50,7 @@ class Settings(BaseSettings):
     default_sl_pct: float = Field(default=0.03)     # 3% stop loss
     default_tp_pct: float = Field(default=0.06)     # 6% take profit
     max_daily_drawdown_pct: float = Field(default=0.05)  # kill-switch at 5%
+    max_holding_hours: int = Field(default=48)           # time-based exit
 
     # Agent weights for PortfolioManager (must sum to 1.0)
     agent_weights: dict = Field(
@@ -74,7 +77,7 @@ class Settings(BaseSettings):
             return "sqlite:///./paper_trading.db"
         return v
 
-    @field_validator("assets", "llm_provider_order", mode="before")
+    @field_validator("assets", "llm_provider_order", "asset_classes", mode="before")
     @classmethod
     def _split_csv(cls, v: object) -> object:
         """Accept comma-separated env values (e.g. BTC/USDT,ETH/USDT) or JSON lists."""

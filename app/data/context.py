@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from pydantic import BaseModel
 
 from app.data.forecast import get_forecast
@@ -24,11 +27,17 @@ class MarketContext(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
-def build_context(asset: str, timeframe: str, whale_api_key: str = "") -> MarketContext:
+def build_context(
+    asset: str,
+    timeframe: str,
+    whale_api_key: str = "",
+    ohlcv_fn: Callable[..., Any] | None = None,
+) -> MarketContext:
     ctx = MarketContext(asset=asset, timeframe=timeframe)
+    _ohlcv = ohlcv_fn or get_ohlcv
 
     try:
-        df = get_ohlcv(asset, timeframe)
+        df = _ohlcv(asset, timeframe)
         ctx.ohlcv = df.reset_index().to_dict("records") if not df.empty else []
         if df.empty:
             ctx.degraded_sources.append("prices")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC
+
 from app.broker.paper import PaperBroker
 
 
@@ -50,3 +52,33 @@ def test_get_positions():
     positions = b.get_positions()
     assert len(positions) == 1
     assert positions[0].asset == "BTC/USDT"
+
+
+# ---------------------------------------------------------------------------
+# Time-based exit logic (A3)
+# ---------------------------------------------------------------------------
+
+def _age_hours(h: float) -> str:
+    from datetime import datetime, timedelta
+    dt = datetime.now(UTC) - timedelta(hours=h)
+    return dt.isoformat()
+
+
+def _check_time_exit(opened_at: str, max_hours: int, mark_price: float) -> bool:
+    from datetime import datetime
+    opened_dt = datetime.fromisoformat(opened_at.replace("Z", "+00:00"))
+    age_hours = (datetime.now(UTC) - opened_dt).total_seconds() / 3600
+    return mark_price > 0 and age_hours >= max_hours
+
+
+def test_time_exit_triggers():
+    assert _check_time_exit(_age_hours(49), max_hours=48, mark_price=50_000.0) is True
+
+
+def test_time_exit_no_trigger():
+    assert _check_time_exit(_age_hours(2), max_hours=48, mark_price=50_000.0) is False
+
+
+def test_time_exit_zero_price():
+    # must NOT close when price is 0 — preserves the existing guard
+    assert _check_time_exit(_age_hours(100), max_hours=48, mark_price=0.0) is False

@@ -16,6 +16,7 @@ from pathlib import Path
 from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
+from app.data.asset_registry import AssetRegistry
 from app.persistence.models import init_db
 from app.persistence.repo import (
     get_equity_history,
@@ -40,10 +41,12 @@ def build() -> Path:
     balance = float(state.get("balance", settings.paper_initial_balance))
     positions = list((state.get("positions") or {}).values())
     deployed = sum(p["size"] * p["entry_price"] for p in positions)
+    registry = AssetRegistry(settings)
 
     data = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "assets": list(settings.assets),
+        "asset_classes": {a: registry.get_asset_class(a) for a in settings.assets},
         "initial_balance": settings.paper_initial_balance,
         "balance": balance,
         "equity": balance + deployed,

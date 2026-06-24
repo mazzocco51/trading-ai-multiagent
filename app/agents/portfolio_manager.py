@@ -45,27 +45,40 @@ class PortfolioManagerAgent(BaseAgent):
         signal_map = {"long": 1.0, "short": -1.0, "neutral": 0.0}
         weighted_score = 0.0
         total_weight = 0.0
+        active_weight = 0.0  # weight of agents that actually produced a signal
         views_summary: list[dict] = []
 
         for v in views:
             w = self.weights.get(v.agent, 0.1)
+            has_signal = v.confidence > 0
             score = signal_map.get(v.signal, 0.0) * v.confidence * w
             weighted_score += score
             total_weight += w
+            if has_signal:
+                active_weight += w
             views_summary.append({
                 "agent": v.agent,
                 "signal": v.signal,
                 "confidence": v.confidence,
                 "weight": w,
+                "active": has_signal,
                 "rationale": v.rationale[:200],
             })
 
-        norm_score = weighted_score / (total_weight or 1.0)
+        # Normalise by active weight so missing agents don't dilute conviction
+        norm_score = weighted_score / (active_weight or total_weight or 1.0)
+
+        # Floor: single weak source → cap conviction to avoid acting on thin data
+        low_coverage = active_weight < 0.30
+        if low_coverage:
+            norm_score = max(-0.30, min(0.30, norm_score))
 
         user_msg = json.dumps({
             "asset": asset,
             "timeframe": ctx.timeframe,
             "weighted_signal_score": round(norm_score, 4),
+            "active_weight_sum": round(active_weight, 4),
+            "low_coverage": low_coverage,
             "agent_views": views_summary,
             "current_indicators": ctx.indicators,
             "current_position": open_position,  # {"side","entry_price","unrealized_pct"} or null
@@ -114,11 +127,15 @@ class PortfolioManagerAgent(BaseAgent):
         fb_size = min(abs(norm_score) * 0.25, 0.20)
         fb_conviction = abs(norm_score)
 
+        coverage_note = (
+            f" [low coverage: active_weight={active_weight:.2f}]" if low_coverage else ""
+        )
+        rationale = f"Fallback rule applied. Weighted score: {norm_score:.4f}{coverage_note}"
         return TradeIdea(
             asset=asset,
             action=fb_action,
             target_size_pct=fb_size,
             conviction=fb_conviction,
-            combined_rationale=f"Fallback rule applied. Weighted score: {norm_score:.4f}",
+            combined_rationale=rationale,
             agent_views_summary=views_summary,
         )
