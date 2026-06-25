@@ -54,19 +54,21 @@ For **stocks**, the crypto-specific agents (on-chain, Fear & Greed) are excluded
 ```mermaid
 flowchart TD
     subgraph DATA["Data layer (app/data/)"]
-        P["prices.py — multi-exchange OHLCV\n(kraken→coinbase→kucoin→binance fallback)"]
-        SK["stocks.py — yfinance (optional)"]
-        I["indicators.py — MACD · RSI · Pivot"]
-        F["forecast.py — Prophet"]
-        S["sentiment.py — Fear & Greed"]
-        W["whale.py — on-chain flows"]
-        N["news.py — RSS headlines"]
+        direction LR
+        P["prices.py<br/>multi-exchange OHLCV"]
+        SK["stocks.py<br/>yfinance · optional"]
+        I["indicators.py<br/>MACD · RSI · pivot"]
+        F["forecast.py<br/>Prophet"]
+        S["sentiment.py<br/>Fear & Greed"]
+        W["whale.py<br/>on-chain flows"]
+        N["news.py<br/>RSS headlines"]
     end
 
-    CTX["MarketContext\n(shared blackboard, per asset)"]
-    SEL["agent_selector\n(picks agents by asset class)"]
+    CTX["MarketContext<br/>shared blackboard"]
+    SEL["agent_selector<br/>pick agents by asset class"]
 
-    subgraph AGENTS["Specialist agents (app/agents/)"]
+    subgraph AGENTS["Specialist agents"]
+        direction LR
         TA[Technical]
         FA[Forecast]
         SA[Sentiment]
@@ -74,18 +76,17 @@ flowchart TD
         NA[News]
     end
 
-    PM["PortfolioManager\ncoverage-normalised weighted vote + LLM synthesis"]
-    RM["RiskManager (deterministic)\nSL/TP · exposure caps · kill-switch · time-exit"]
-    BR["Broker\nPaperBroker (crypto) · PaperStockBroker (stocks)"]
-    DB[("Postgres (Neon)\nstate persists across runs")]
-    DASH["Static HTML dashboard\n→ GitHub Pages"]
-
-    LLM["LLM gateway\nGemini → Groq → OpenRouter (fallback + budget guard)"]
+    PM["PortfolioManager<br/>weighted vote + LLM"]
+    RM["RiskManager · deterministic<br/>SL/TP · caps · kill-switch · time-exit"]
+    BR["Broker<br/>paper · crypto / stock"]
+    DB[("Postgres · Neon<br/>persistent state")]
+    DASH["Static dashboard<br/>GitHub Pages"]
+    LLM["LLM gateway<br/>Gemini · Groq · OpenRouter"]
 
     DATA --> CTX --> SEL --> AGENTS
     AGENTS -->|AgentView JSON| PM --> RM --> BR
-    AGENTS -. LLM calls .-> LLM
-    PM -. LLM calls .-> LLM
+    AGENTS -. LLM .-> LLM
+    PM -. LLM .-> LLM
     BR --> DB
     PM --> DB
     AGENTS --> DB
