@@ -43,8 +43,8 @@
   .wrap { max-width:1180px; margin:0 auto; padding:26px 22px 60px; }
 
   /* old-Macintosh CRT header */
-  .crt-wrap { display:flex; justify-content:center; margin-bottom:24px; }
-  .monitor { background:#d9d2c2; border:2px solid #c9bca1; border-radius:20px; padding:16px 18px 20px; box-shadow:var(--sh-2); max-width:100%; }
+  .crt-wrap { margin-bottom:24px; }
+  .monitor { width:100%; background:#d9d2c2; border:2px solid #c9bca1; border-radius:20px; padding:16px 18px 20px; box-shadow:var(--sh-2); }
   .screen { background:#c3c5b7; border:7px solid #1d1e1c; border-radius:16px; padding:20px 44px 22px; text-align:center; position:relative; overflow:hidden;
             box-shadow: inset 0 0 30px rgba(0,0,0,.30); }
   .screen::after { content:""; position:absolute; inset:0; pointer-events:none;
@@ -87,6 +87,10 @@
   .layout-closed    { grid-column:1; grid-row:3; }
   .panel { padding:17px 19px; }
   .panel h3 { font-size:15px; font-weight:600; }
+  .h3row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .vsmkt { font-size:12px; font-weight:700; padding:3px 9px; border-radius:8px; background:var(--surface-2); color:var(--muted); white-space:nowrap; }
+  .vsmkt.pos { background:var(--green-bg); color:var(--green); }
+  .vsmkt.neg { background:var(--red-bg); color:var(--red); }
   .panel .hint { font-size:12px; color:var(--muted); margin:3px 0 13px; }
   .chart-box { height:286px; }
 
@@ -126,6 +130,16 @@
   .empty { color:var(--faint); font-size:13.5px; padding:22px 4px; text-align:center; }
 
   .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .scrollbox { max-height:340px; overflow-y:auto; background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:0 8px; }
+  .scrollbox table { font-size:11.5px; }
+  .scrollbox th { font-size:9px; padding:7px 7px; }
+  .scrollbox td { padding:8px 7px; }
+  .scrollbox .chip { padding:2px 7px; font-size:10px; }
+  .scrollbox thead th { position:sticky; top:0; background:var(--surface-2); z-index:1; }
+  .scrollbox::-webkit-scrollbar { width:9px; }
+  .scrollbox::-webkit-scrollbar-thumb { background:var(--line); border-radius:6px; }
+  .scrollbox::-webkit-scrollbar-thumb:hover { background:#c7bca4; }
+  .scrollbox::-webkit-scrollbar-track { background:transparent; }
 
   footer { margin-top:22px; font-size:12px; color:var(--faint); text-align:center; }
 
@@ -148,6 +162,15 @@
     .monitor { padding:10px 12px 14px; border-radius:14px; }
     .screen  { padding:14px 18px 16px; border-radius:12px; }
     button, a { min-height:40px; min-width:40px; }
+    /* tidy the agent-consensus panel on phones */
+    .panel { padding:15px 14px; }
+    .votes { gap:5px; }
+    .vote { height:36px; font-size:8.5px; border-radius:7px; }
+    .vote small { font-size:8px; }
+    .conv .pct { min-width:30px; font-size:11px; }
+    .why { font-size:11.5px; line-height:1.55; padding-left:9px; }
+    .drow .asset { font-size:13.5px; }
+    .act { font-size:10.5px; padding:3px 8px; }
   }
 
   /* ── 390px: smaller base font ────────────────────────────────────── */
@@ -175,7 +198,7 @@
 
   <div class="layout">
     <div class="card panel layout-equity">
-      <h3>Equity curve</h3>
+      <h3 class="h3row">Equity curve <span id="vsMarket" class="vsmkt">vs BTC&nbsp;·&nbsp;—</span></h3>
       <div class="hint">Account value over time · paper</div>
       <div class="chart-box"><canvas id="equityChart"></canvas></div>
     </div>
@@ -245,14 +268,22 @@ function kpis(){
   const open = (DATA.open_positions||[]).length;
   const closed = (DATA.closed_trades||[]);
   const wins = closed.filter(t=>(t.pnl||0)>0).length;
-  const wr = closed.length?wins/closed.length*100:0;
+  const losses = closed.length - wins;
+  // Net realized P&L (algebraic sum) — a $30 win beats two $10 losses
+  const realized = closed.reduce((s,t)=>s+(t.pnl||0),0);
+  const grossWin = closed.filter(t=>(t.pnl||0)>0).reduce((s,t)=>s+t.pnl,0);
+  const grossLoss = Math.abs(closed.filter(t=>(t.pnl||0)<0).reduce((s,t)=>s+t.pnl,0));
+  const pf = grossLoss>0 ? grossWin/grossLoss : (grossWin>0 ? Infinity : 0);
+  const rCls = realized>=0?"pos":"neg";
+  const pfTxt = pf===Infinity ? "∞" : fmt(pf,2);
   document.getElementById("kpis").innerHTML = `
     <div class="card kpi"><div class="label">Equity</div><div class="val num">${usd(eq)}</div><div class="sub ${cls}">${pnl>=0?'+':''}${fmt(pct)}% all-time</div></div>
-    <div class="card kpi"><div class="label">Cash balance</div><div class="val num">${usd(DATA.balance)}</div><div class="sub">free to deploy</div></div>
+    <div class="card kpi"><div class="label">Net realized P&amp;L</div><div class="val num ${rCls}">${realized>=0?'+':''}${usd(realized)}</div><div class="sub">${wins}W / ${losses}L · profit factor ${closed.length?pfTxt:'—'}</div></div>
     <div class="card kpi"><div class="label">Open positions</div><div class="val num">${open}</div><div class="sub">${closed.length} closed total</div></div>
-    <div class="card kpi"><div class="label">Win rate</div><div class="val num">${closed.length?fmt(wr,1)+'%':'—'}</div><div class="sub">${wins}/${closed.length} profitable</div></div>`;
+    <div class="card kpi"><div class="label">Cash balance</div><div class="val num">${usd(DATA.balance)}</div><div class="sub">free to deploy</div></div>`;
 }
 
+let _eqChart = null;
 function equity(){
   const h = DATA.equity_history||[];
   const labels = h.map(p=>new Date(p.t).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}));
@@ -260,13 +291,42 @@ function equity(){
   const ctx = document.getElementById("equityChart").getContext("2d");
   const g = ctx.createLinearGradient(0,0,0,286);
   g.addColorStop(0,"rgba(49,99,214,.16)"); g.addColorStop(1,"rgba(49,99,214,0)");
-  new Chart(ctx,{ type:"line",
-    data:{ labels, datasets:[{ data:vals, borderColor:"#3163d6", backgroundColor:g, borderWidth:2.5, fill:true, tension:.35, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:"#3163d6" }] },
+  _eqChart = new Chart(ctx,{ type:"line",
+    data:{ labels, datasets:[{ label:"Desk", data:vals, borderColor:"#3163d6", backgroundColor:g, borderWidth:2.5, fill:true, tension:.35, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:"#3163d6" }] },
     options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>" $"+fmt(c.parsed.y) } } },
+      plugins:{ legend:{display:true, position:"top", align:"end", labels:{boxWidth:12,boxHeight:2,color:"#756e5d",font:{size:11},usePointStyle:false} },
+                tooltip:{ callbacks:{ label:(c)=>" "+c.dataset.label+": $"+fmt(c.parsed.y) } } },
       scales:{ x:{ grid:{color:"rgba(90,72,40,.08)"}, ticks:{maxTicksLimit:6,color:"#a59c88",font:{size:10}} },
                y:{ grid:{color:"rgba(90,72,40,.08)"}, ticks:{color:"#a59c88",font:{size:10},callback:(v)=>"$"+fmt(v,0)} } } }
   });
+  loadBenchmark(h);
+}
+
+// Overlay "BTC buy & hold": what holding BTC since day 1 would be worth.
+async function loadBenchmark(h){
+  if(!_eqChart || h.length<2) return;
+  try{
+    const t0 = new Date(h[0].t).getTime(), t1 = new Date(h[h.length-1].t).getTime();
+    const url = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&startTime=${t0-3600000}&endTime=${t1+3600000}&limit=1000`;
+    const kl = await (await fetch(url)).json();
+    if(!Array.isArray(kl) || kl.length<2) return;
+    const times = kl.map(k=>k[0]), closes = kl.map(k=>parseFloat(k[4]));
+    const nearest = (ts)=>{ let best=0, bd=Infinity; for(let i=0;i<times.length;i++){ const d=Math.abs(times[i]-ts); if(d<bd){bd=d;best=i;} } return closes[best]; };
+    const init = DATA.initial_balance||10000;
+    const c0 = nearest(t0);
+    const bench = h.map(p=> init * nearest(new Date(p.t).getTime())/c0 );
+    _eqChart.data.datasets.push({ label:"BTC buy & hold", data:bench, borderColor:"#f7941a", borderWidth:1.8, borderDash:[5,4], fill:false, tension:.35, pointRadius:0, pointHoverRadius:4 });
+    _eqChart.update();
+    // Alpha: desk return minus market (BTC buy & hold) return, over the same period
+    const deskRet = ((DATA.equity ?? DATA.balance ?? init)/init - 1)*100;
+    const benchRet = (bench[bench.length-1]/init - 1)*100;
+    const alpha = deskRet - benchRet;
+    const badge = document.getElementById("vsMarket");
+    if(badge){
+      badge.innerHTML = "vs BTC&nbsp;·&nbsp;" + (alpha>=0?"+":"") + fmt(alpha,1) + "%";
+      badge.className = "vsmkt " + (alpha>=0?"pos":"neg");
+    }
+  }catch(e){}
 }
 
 function consensus(){
@@ -330,14 +390,14 @@ function paintOpen(){
   }).join("");
 }
 function closedTbl(){
-  const rows = (DATA.closed_trades||[]).slice().reverse();
+  const rows = (DATA.closed_trades||[]).slice(-50).reverse();   // last 50, newest first
   const el = document.getElementById("closedTable");
   if(!rows.length){ el.innerHTML = `<div class="empty">No closed trades yet — the desk is warming up.</div>`; return; }
-  el.innerHTML = `<table><thead><tr><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>Opened</th><th>Closed</th></tr></thead><tbody>${
+  el.innerHTML = `<div class="scrollbox"><table><thead><tr><th>Asset</th><th>Side</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th>Opened</th><th>Closed</th></tr></thead><tbody>${
     rows.map(t=>{
       const c=(t.pnl||0)>=0?'pos':'neg';
       return `<tr><td class="asset">${t.asset}</td><td>${chip(t.side)}</td><td class="num">${usd(t.entry_price)}</td><td class="num">${usd(t.exit_price)}</td><td class="num ${c}">${(t.pnl||0)>=0?'+':''}${usd(t.pnl)}</td><td style="color:var(--faint)">${dt(t.opened_at)}</td><td style="color:var(--faint)">${dt(t.closed_at)}</td></tr>`;
-    }).join("")}</tbody></table>`;
+    }).join("")}</tbody></table></div>`;
 }
 
 async function loadLive(){
