@@ -55,11 +55,11 @@ class Settings(BaseSettings):
     # Agent weights for PortfolioManager (must sum to 1.0)
     agent_weights: dict = Field(
         default={
-            "technical": 0.30,
+            "technical": 0.35,
             "forecast": 0.20,
             "sentiment": 0.20,
             "onchain": 0.15,
-            "news": 0.15,
+            "news": 0.10,
         }
     )
 

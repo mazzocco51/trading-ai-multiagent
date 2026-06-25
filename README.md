@@ -7,65 +7,45 @@
 ![Stack: 100% Free](https://img.shields.io/badge/Stack-100%25%20Free-brightgreen)
 ![Built with Claude Code + Pi Agent](https://img.shields.io/badge/Built%20with-Claude%20Code%20%2B%20Pi%20Agent-D97757)
 
-> A team of AI agents that analyses **BTC, ETH and SOL** every hour, debates the market, and places **simulated** paper trades — built as a computer-science portfolio project, not to make money.
+> A small distributed system where **a team of LLM agents** independently analyse the market, vote, and a deterministic risk layer turns that vote into **simulated (paper) trades**. Built as a **computer-science portfolio project** to practise agentic architecture, autonomous-agent orchestration, and zero-cost cloud ops — not to make money.
 
-It runs on a **100% free stack** (free LLM tiers, free database, free hosting) and **never touches real money**.
+It runs **fully autonomously in the cloud on a 100% free stack** (free LLM tiers, free Postgres, free CI/CD and hosting) and **never touches real money**.
 
-**🔗 Live dashboard → https://mazzocco51.github.io/trading-ai-multiagent/** (auto-updated from the running bot)
-
----
-
-## Why I built this
-
-Beyond the trading idea, this project was a hands-on playground for **agentic software engineering** — and that practice is as much the point as the bot itself:
-
-- **Practising with terminal coding agents** — most of this codebase was built by driving **Claude Code** and **[Pi Agent](https://github.com/badlogic/pi-mono)**, learning how to plan, prompt, supervise and debug autonomous coding agents on a real multi-file project.
-- **Multi-agent programming, in both senses** — *writing* agents (the five specialist trading agents that reason and vote) **and** *orchestrating* them with tools that **spawn sub-agents** to parallelise the work.
-- **Zero-cost engineering** — delivering a complete, tested, CI-backed system using only free tiers.
-
-The trading bot is the vehicle; the underlying goal was learning how to architect and supervise **systems of autonomous agents**.
+**🔗 Live dashboard → https://mazzocco51.github.io/trading-ai-multiagent/** — rebuilt and redeployed by the bot itself on every cycle.
 
 ---
 
-## What it does
+## Why I built this (the engineering, not the trading)
 
-- **Five specialist AI agents** look at different things — chart indicators, a price forecast, market mood, whale movements, and news — and each casts a weighted vote.
-- A **Portfolio Manager** merges the votes; a **Risk Manager** (plain Python, not AI) enforces stop-loss, take-profit and exposure limits before anything is executed.
-- Every cycle prints a **plain-language explanation** of what the agents thought and why it traded or stayed flat.
-- A **Streamlit dashboard** shows the equity curve, open positions and the full reasoning behind each decision.
+The trading domain is just the vehicle. The actual goal was hands-on practice with **agentic software engineering**:
 
-> Why a *team* of agents instead of one? Because each specialist gets a small, focused prompt (fewer mistakes), a broken data source only weakens one agent instead of the whole system, and the safety limits live in deterministic code the AI can't talk its way around.
+- **Designing a multi-agent system** — five specialist agents behind a uniform `AgentView` contract, coordinated through a shared-context ("blackboard") pattern, with a deterministic coordinator on top.
+- **Orchestrating autonomous coding agents** — most of this codebase was built by driving **Claude Code** and **[Pi Agent](https://github.com/badlogic/pi-mono)** (planning tasks, prompting, spawning sub-agents in parallel, reviewing and integrating their work).
+- **Zero-cost, production-style ops** — automated tests + CI, a self-updating deployment, persistent state, and resilient external integrations, all on free tiers.
+
+---
+
+## How it works (in one paragraph)
+
+Every cycle, for each asset, a **data layer** assembles a `MarketContext` (prices, indicators, a statistical forecast, market sentiment, on-chain flows, news). Five **specialist agents** each read that context and return a structured opinion (`long`/`short`/`neutral` + confidence + rationale) via an LLM call. A **Portfolio Manager** aggregates the votes (confidence-weighted, **re-normalised over the agents that actually had data**) into a single trade idea. A **Risk Manager** — plain Python, no LLM — validates it against hard limits (stop-loss/take-profit, exposure caps, a daily-drawdown kill-switch, a max-holding-time exit) and either executes it on the paper broker or vetoes it. Everything is persisted to Postgres and rendered to a live dashboard.
+
+> **Why a team of agents instead of one prompt?** Each agent gets a small focused prompt (fewer hallucinations); a broken data source degrades **one** vote instead of the whole decision; and the safety limits live in deterministic code the model can't talk its way around.
 
 ---
 
 ## The five specialist agents
 
-Each agent looks at one slice of reality and gives a simple opinion — **up, down, or neutral** — plus how confident it is. None of them sees the whole picture alone; the Portfolio Manager combines them.
+Each agent looks at one slice of the input and returns a simple, comparable opinion. None of them sees the whole picture — the Portfolio Manager combines them with configurable weights.
 
-| Agent | What it looks at | In plain words |
-|---|---|---|
-| **Technical** | Price-chart indicators (MACD, RSI, pivot levels) | Reads the shape of the recent price chart: is it trending up, down, or stretched too far in one direction? |
-| **Forecast** | A statistical time-series model (Prophet) | Projects where the price is likely to go next — and admits how uncertain that guess is. |
-| **Sentiment** | The Fear & Greed Index | Gauges the market's mood. When everyone is fearful it often leans the opposite way ("buy when others panic"). |
-| **On-chain** | Large wallet transfers ("whales") | Watches whether the biggest players are moving money in to buy or out to sell. |
-| **News** | Recent crypto headlines | Flags whether the latest news looks risky or reassuring. |
+| Agent | Input | Default weight | What it does |
+|---|---|---|---|
+| **Technical** | MACD, RSI, pivot levels | 0.35 | Reads momentum/structure of the recent price chart |
+| **Forecast** | Prophet time-series model | 0.20 | Projects the likely next move and reports its uncertainty |
+| **Sentiment** | Fear & Greed Index | 0.20 | Market mood; leans contrarian at extremes |
+| **On-chain** | Large wallet transfers | 0.15 | Whether big holders are accumulating or distributing (crypto only) |
+| **News** | Recent headlines (RSS) | 0.10 | Flags headline risk (noisy source → deliberately low weight) |
 
----
-
-## Full guide
-
-This README is the quick overview. **For the detailed explanation — how decisions are made, the voting math, setup, deployment and more, written so that even a non-trader can follow — see:**
-
-### → **[GUIDA.md](GUIDA.md)**
-
----
-
-## Dashboard
-
-<!-- Add your screenshot: save it as docs/dashboard.png and it will appear here -->
-![Dashboard](docs/dashboard.png)
-
-Equity curve · open positions · per-agent reasoning · forecast accuracy · win rate.
+For **stocks**, the crypto-specific agents (on-chain, Fear & Greed) are excluded automatically and the weights are re-normalised.
 
 ---
 
@@ -73,52 +53,57 @@ Equity curve · open positions · per-agent reasoning · forecast accuracy · wi
 
 ```mermaid
 flowchart TD
-    subgraph DATA["Data Layer (app/data/)"]
-        P[prices.py\nccxt OHLCV]
-        I[indicators.py\nMACD · RSI · Pivot]
-        F[forecast.py\nProphet]
-        S[sentiment.py\nFear & Greed]
-        W[whale.py\nWhale Alert]
-        N[news.py\nRSS · CryptoPanic]
+    subgraph DATA["Data layer (app/data/)"]
+        P["prices.py — multi-exchange OHLCV\n(kraken→coinbase→kucoin→binance fallback)"]
+        SK["stocks.py — yfinance (optional)"]
+        I["indicators.py — MACD · RSI · Pivot"]
+        F["forecast.py — Prophet"]
+        S["sentiment.py — Fear & Greed"]
+        W["whale.py — on-chain flows"]
+        N["news.py — RSS headlines"]
     end
 
-    subgraph BB["Blackboard"]
-        CTX[MarketContext\nper asset]
+    CTX["MarketContext\n(shared blackboard, per asset)"]
+    SEL["agent_selector\n(picks agents by asset class)"]
+
+    subgraph AGENTS["Specialist agents (app/agents/)"]
+        TA[Technical]
+        FA[Forecast]
+        SA[Sentiment]
+        OA[OnChain]
+        NA[News]
     end
 
-    subgraph SPECIALISTS["Specialist Agents (app/agents/)"]
-        TA[TechnicalAgent\nMACD · RSI · Pivot]
-        FA[ForecastAgent\nProphet + uncertainty]
-        SA[SentimentAgent\nFear & Greed contrarian]
-        OA[OnChainAgent\nWhale flows]
-        NA[NewsAgent\nHeadline risk]
-    end
+    PM["PortfolioManager\ncoverage-normalised weighted vote + LLM synthesis"]
+    RM["RiskManager (deterministic)\nSL/TP · exposure caps · kill-switch · time-exit"]
+    BR["Broker\nPaperBroker (crypto) · PaperStockBroker (stocks)"]
+    DB[("Postgres (Neon)\nstate persists across runs")]
+    DASH["Static HTML dashboard\n→ GitHub Pages"]
 
-    subgraph COORD["Coordinator"]
-        PM[PortfolioManagerAgent\nWeighted vote + LLM synthesis\nTradeIdea]
-        RM[RiskManager\nDeterministic gates\nValidatedOrder]
-    end
+    LLM["LLM gateway\nGemini → Groq → OpenRouter (fallback + budget guard)"]
 
-    subgraph EXEC["Execution"]
-        BR[Broker\nPaperBroker default\nHyperliquid Testnet optional]
-    end
-
-    subgraph PERSIST["Persistence"]
-        DB[(Postgres\nNeon free tier)]
-    end
-
-    DASH[Streamlit Dashboard]
-
-    DATA --> BB
-    CTX --> TA & FA & SA & OA & NA
-    TA & FA & SA & OA & NA -->|AgentView JSON| PM
-    PM -->|TradeIdea| RM
-    RM -->|ValidatedOrder| BR
+    DATA --> CTX --> SEL --> AGENTS
+    AGENTS -->|AgentView JSON| PM --> RM --> BR
+    AGENTS -. LLM calls .-> LLM
+    PM -. LLM calls .-> LLM
     BR --> DB
     PM --> DB
-    TA & FA & SA & OA & NA --> DB
+    AGENTS --> DB
     DB --> DASH
 ```
+
+---
+
+## Engineering highlights
+
+- **Uniform agent contract** (`AgentView`) + blackboard `MarketContext` → agents are independent, swappable, and parallelisable.
+- **Deterministic risk layer decoupled from the LLM** — safety limits can't be prompt-injected away.
+- **Provider-agnostic LLM gateway** with automatic fallback (Gemini → Groq → OpenRouter) and a daily request budget to stay inside free tiers.
+- **Resilient data layer** — multi-exchange fallback (survives Binance's geo-block on US CI runners), graceful degradation, and conviction **re-normalised over agents that actually returned data**.
+- **Stateful & persistent** — the paper portfolio (balance + open positions) is serialised to Postgres so it survives stateless hourly runs.
+- **Automated CI/CD** — `ruff` + `pytest` on every push; the dashboard is rebuilt and **redeployed to GitHub Pages on every trading cycle**.
+- **Asset-class abstraction** — crypto by default, US stocks optional (yfinance), with per-class agent selection and market-hours handling.
+- **~60 tests**, fully reproducible, zero paid services.
 
 ---
 
@@ -128,16 +113,20 @@ flowchart TD
 git clone https://github.com/mazzocco51/trading-ai-multiagent.git
 cd trading-ai-multiagent
 pip install -e ".[all]"
-cp .env.example .env      # then add a free Gemini key (see the guide)
-python -m app.run         # run one analysis + paper-trade cycle
+cp .env.example .env      # add one free Gemini API key (see GUIDA.md)
+python -m app.run         # run a single analyse + paper-trade cycle
+python -m dashboard.build_html   # regenerate the dashboard (public/index.html)
 ```
 
-Launch the dashboard:
-```bash
-python -m streamlit run dashboard/app.py
-```
+The bot also runs **24/7 in the cloud**: a GitHub Actions workflow (cron + an external trigger for reliability) executes a cycle, persists state to Neon Postgres, and republishes the dashboard to GitHub Pages.
 
-Full setup, free API keys, 24/7 deployment and backtesting are all covered in **[GUIDA.md](GUIDA.md)**.
+Full setup, free API keys, deployment and the decision math are in **[GUIDA.md](GUIDA.md)**.
+
+---
+
+## Tech stack
+
+Python 3.11 · pydantic / pydantic-settings · ccxt · Prophet · pandas · SQLAlchemy + **Neon** (Postgres) · Chart.js static dashboard (+ optional Streamlit) · **Gemini / Groq / OpenRouter** free tiers · **GitHub Actions** CI/CD + **GitHub Pages** · pytest · ruff.
 
 ---
 
