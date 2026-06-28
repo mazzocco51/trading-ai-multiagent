@@ -262,25 +262,22 @@ function coins(){
 }
 
 function kpis(){
+  // Defensive desk: lead with capital preservation & risk control, not raw P&L.
   const init = DATA.initial_balance||10000;
   const eq = DATA.equity ?? DATA.balance ?? init;
-  const pnl = eq-init, pct = init?pnl/init*100:0, cls = pnl>=0?"pos":"neg";
+  const preserved = init ? eq/init*100 : 100;
   const open = (DATA.open_positions||[]).length;
   const closed = (DATA.closed_trades||[]);
   const wins = closed.filter(t=>(t.pnl||0)>0).length;
-  const losses = closed.length - wins;
-  // Net realized P&L (algebraic sum) — a $30 win beats two $10 losses
-  const realized = closed.reduce((s,t)=>s+(t.pnl||0),0);
-  const grossWin = closed.filter(t=>(t.pnl||0)>0).reduce((s,t)=>s+t.pnl,0);
-  const grossLoss = Math.abs(closed.filter(t=>(t.pnl||0)<0).reduce((s,t)=>s+t.pnl,0));
-  const pf = grossLoss>0 ? grossWin/grossLoss : (grossWin>0 ? Infinity : 0);
-  const rCls = realized>=0?"pos":"neg";
-  const pfTxt = pf===Infinity ? "∞" : fmt(pf,2);
+  const wr = closed.length ? wins/closed.length*100 : 0;
+  // Max drawdown (the headline risk metric for a defensive strategy)
+  let peak = -Infinity, maxdd = 0;
+  (DATA.equity_history||[]).forEach(p=>{ peak=Math.max(peak,p.balance); if(peak>0) maxdd=Math.max(maxdd,(peak-p.balance)/peak); });
   document.getElementById("kpis").innerHTML = `
-    <div class="card kpi"><div class="label">Equity</div><div class="val num">${usd(eq)}</div><div class="sub ${cls}">${pnl>=0?'+':''}${fmt(pct)}% all-time</div></div>
-    <div class="card kpi"><div class="label">Net realized P&amp;L</div><div class="val num ${rCls}">${realized>=0?'+':''}${usd(realized)}</div><div class="sub">${wins}W / ${losses}L · profit factor ${closed.length?pfTxt:'—'}</div></div>
-    <div class="card kpi"><div class="label">Open positions</div><div class="val num">${open}</div><div class="sub">${closed.length} closed total</div></div>
-    <div class="card kpi"><div class="label">Cash balance</div><div class="val num">${usd(DATA.balance)}</div><div class="sub">free to deploy</div></div>`;
+    <div class="card kpi"><div class="label">Equity</div><div class="val num">${usd(eq)}</div><div class="sub">started at ${usd(init)}</div></div>
+    <div class="card kpi"><div class="label">Capital preserved</div><div class="val num">${fmt(preserved,1)}%</div><div class="sub">of initial capital</div></div>
+    <div class="card kpi"><div class="label">Max drawdown</div><div class="val num">${fmt(maxdd*100,1)}%</div><div class="sub">worst dip · lower is better</div></div>
+    <div class="card kpi"><div class="label">Open positions</div><div class="val num">${open}</div><div class="sub">${closed.length} closed${closed.length?' · '+fmt(wr,0)+'% win':''}</div></div>`;
 }
 
 let _eqChart = null;

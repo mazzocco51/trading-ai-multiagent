@@ -16,5 +16,10 @@ Rules:
 - target_size_pct: fraction of equity to allocate (0.05 to 0.25 max)
 - Always cite the key disagreements in combined_rationale
 
+Lessons learned:
+- The input includes "lessons_learned", a list of concrete rules distilled from past closed trades by the reflection agent.
+- Treat these as hard-won guidance: weigh them when deciding, and avoid repeating mistakes they warn against.
+- When a lesson is decisive for your call (e.g. it argues against an otherwise-bullish setup), mention it in combined_rationale.
+
 Respond with valid JSON only, no markdown fences:
 {"action": "open_long|open_short|close|hold", "target_size_pct": 0.0-0.25, "conviction": 0.0-1.0, "combined_rationale": "..."}

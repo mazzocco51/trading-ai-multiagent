@@ -12,6 +12,7 @@ from app.agents.forecast_agent import ForecastAgent
 from app.agents.news_agent import NewsAgent
 from app.agents.onchain import OnChainAgent
 from app.agents.portfolio_manager import PortfolioManagerAgent, TradeIdea
+from app.agents.reflection import ReflectionAgent
 from app.agents.risk_manager import RiskManager
 from app.agents.sentiment_agent import SentimentAgent
 from app.agents.technical import TechnicalAgent
@@ -21,7 +22,12 @@ from app.data.asset_registry import AssetRegistry
 from app.data.context import build_context
 from app.data.stocks import get_stock_ohlcv, is_market_open
 from app.explain import explain_cycle
-from app.persistence.repo import save_decision, save_equity_snapshot
+from app.persistence.repo import (
+    add_lessons,
+    get_recent_lessons,
+    save_decision,
+    save_equity_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,42 @@ _AGENT_CLASS_MAP: dict[str, type] = {
     "onchain": OnChainAgent,
     "news": NewsAgent,
 }
+
+
+def apply_trend_gate(
+    idea: TradeIdea, asset: str, indicators: dict | None
+) -> TradeIdea:
+    """Downgrade open signals that fight the dominant trend to ``hold``.
+
+    A long is blocked when price is below the trend EMA; a short is blocked
+    when price is above it. Returns the idea unchanged when trend data is
+    missing or the action is not an open.
+    """
+    trend_ema = (indicators or {}).get("trend_ema")
+    last_close = (indicators or {}).get("last_close")
+    if not trend_ema or not last_close:
+        return idea
+    if idea.action == "open_long" and last_close < trend_ema:
+        return TradeIdea(
+            asset=asset, action="hold", target_size_pct=0.0,
+            conviction=idea.conviction,
+            combined_rationale=(
+                f"Trend gate: price {last_close:.2f} < EMA50 "
+                f"{trend_ema:.2f} — long blocked"
+            ),
+            agent_views_summary=idea.agent_views_summary,
+        )
+    if idea.action == "open_short" and last_close > trend_ema:
+        return TradeIdea(
+            asset=asset, action="hold", target_size_pct=0.0,
+            conviction=idea.conviction,
+            combined_rationale=(
+                f"Trend gate: price {last_close:.2f} > EMA50 "
+                f"{trend_ema:.2f} — short blocked"
+            ),
+            agent_views_summary=idea.agent_views_summary,
+        )
+    return idea
 
 
 def run_cycle(
@@ -103,7 +145,14 @@ def run_cycle(
         views: list[AgentView] = []
         for AgentCls in specialist_classes:
             try:
-                agent = AgentCls(gateway)  # type: ignore[call-arg]
+                if AgentCls is SentimentAgent:
+                    agent = SentimentAgent(
+                        gateway,
+                        extreme_only=settings.sentiment_extreme_only,
+                        extreme_threshold=settings.sentiment_extreme_threshold,
+                    )
+                else:
+                    agent = AgentCls(gateway)  # type: ignore[call-arg]
                 view = agent.analyze(ctx)
                 views.append(view)
             except Exception as exc:
@@ -153,7 +202,12 @@ def run_cycle(
         # 4. Portfolio Manager aggregates views into a TradeIdea
         # ------------------------------------------------------------------ #
         pm = PortfolioManagerAgent(gateway, asset_weights)
-        idea = pm.aggregate(views, asset, ctx, open_position=open_position)
+        lessons = get_recent_lessons(repo_session, limit=8)
+        idea = pm.aggregate(views, asset, ctx, open_position=open_position, lessons=lessons)
+
+        # Trend filter: downgrade open signals that fight the dominant trend
+        if settings.trend_filter_enabled:
+            idea = apply_trend_gate(idea, asset, ctx.indicators)
 
         # ------------------------------------------------------------------ #
         # 5. Risk Manager validates / vetos the order
@@ -189,6 +243,10 @@ def run_cycle(
                     side = "long" if order.action == "open_long" else "short"
                     if held is not None and held.side == side:
                         logger.info("Already holding %s %s — no stacking", side, asset)
+                    elif hasattr(broker, "is_in_cooldown") and broker.is_in_cooldown(
+                        asset, settings.cooldown_hours_after_stop
+                    ):
+                        logger.info("Cooldown active for %s — skipping open", asset)
                     else:
                         try:
                             broker.place_order(
@@ -266,5 +324,28 @@ def run_cycle(
                 "balance": broker.get_balance(),
             }
         )
+
+    # ------------------------------------------------------------------ #
+    # 8. Reflection trigger — distil lessons after every N closed trades
+    # ------------------------------------------------------------------ #
+    trade_history = getattr(broker, "trade_history", [])
+    closed_count = len(trade_history)
+    last_reflected = getattr(broker, "last_reflected_count", 0)
+    n = settings.reflection_every_n_trades
+    # Edge-trigger: reflect once per new batch of N closed trades, not every
+    # cycle the count happens to sit on a multiple of N.
+    if closed_count >= n and closed_count // n > last_reflected // n:
+        try:
+            recent = list(trade_history[-n:])
+            existing = get_recent_lessons(repo_session, limit=8)
+            agent = ReflectionAgent(gateway)
+            new_lessons = agent.reflect(recent, existing)
+            if new_lessons:
+                add_lessons(repo_session, new_lessons)
+                logger.info("Reflection: stored %d new lessons", len(new_lessons))
+            if hasattr(broker, "last_reflected_count"):
+                broker.last_reflected_count = closed_count
+        except Exception as exc:
+            logger.warning("Reflection failed: %s", exc)
 
     return results

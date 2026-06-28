@@ -21,7 +21,7 @@ def _rsi(close: pd.Series, length: int = 14) -> pd.Series:
     return rsi
 
 
-def compute_indicators(df: pd.DataFrame) -> dict:
+def compute_indicators(df: pd.DataFrame, trend_ema_period: int = 50) -> dict:
     """Compute MACD (12/26/9), RSI (14) and classic pivot points.
 
     Pure-pandas implementation (no external TA library) so it installs
@@ -37,6 +37,8 @@ def compute_indicators(df: pd.DataFrame) -> dict:
         "s1": None,
         "r2": None,
         "s2": None,
+        "trend_ema": None,
+        "last_close": None,
     }
     required = {"open", "high", "low", "close", "volume"}
     if df is None or df.empty or not required.issubset(set(df.columns)):
@@ -51,6 +53,7 @@ def compute_indicators(df: pd.DataFrame) -> dict:
         signal_line = _ema(macd_line, 9)
         hist_line = macd_line - signal_line
         rsi_series = _rsi(close, 14)
+        trend_ema_series = _ema(close, trend_ema_period)
 
         last = df.iloc[-1]
         h, lo, c = float(last["high"]), float(last["low"]), float(last["close"])
@@ -74,6 +77,8 @@ def compute_indicators(df: pd.DataFrame) -> dict:
             "s1": s1,
             "r2": r2,
             "s2": s2,
+            "trend_ema": last_val(trend_ema_series),
+            "last_close": float(c),
         }
     except Exception:
         return null_result

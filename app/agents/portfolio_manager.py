@@ -41,6 +41,7 @@ class PortfolioManagerAgent(BaseAgent):
         asset: str,
         ctx: MarketContext,
         open_position: dict | None = None,
+        lessons: list[str] | None = None,
     ) -> TradeIdea:
         signal_map = {"long": 1.0, "short": -1.0, "neutral": 0.0}
         weighted_score = 0.0
@@ -82,6 +83,7 @@ class PortfolioManagerAgent(BaseAgent):
             "agent_views": views_summary,
             "current_indicators": ctx.indicators,
             "current_position": open_position,  # {"side","entry_price","unrealized_pct"} or null
+            "lessons_learned": lessons or [],
         })
 
         try:

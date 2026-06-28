@@ -21,6 +21,11 @@ class PaperBroker(Broker):
         self.positions: dict[str, Position] = {}
         self.trade_history: list[dict] = []
         self._mock_prices: dict[str, float] = {}
+        self.last_stop_at: dict[str, str] = {}
+        # Number of closed trades present at the last reflection run, so the
+        # reflection loop is edge-triggered (once per new batch) instead of
+        # re-firing every cycle while the count sits on a multiple of N.
+        self.last_reflected_count: int = 0
 
     def set_mock_price(self, asset: str, price: float) -> None:
         self._mock_prices[asset] = price
@@ -46,6 +51,8 @@ class PaperBroker(Broker):
             "balance": self._balance,
             "positions": {a: asdict(p) for a, p in self.positions.items()},
             "trade_history": self.trade_history,
+            "last_stop_at": self.last_stop_at,
+            "last_reflected_count": self.last_reflected_count,
         }
 
     def load_state(self, state: dict) -> None:
@@ -57,6 +64,8 @@ class PaperBroker(Broker):
             a: Position(**p) for a, p in (state.get("positions") or {}).items()
         }
         self.trade_history = list(state.get("trade_history", []))
+        self.last_stop_at = dict(state.get("last_stop_at") or {})
+        self.last_reflected_count = int(state.get("last_reflected_count", 0))
 
     def mark_price(self, asset: str) -> float:
         return self._mock_prices.get(asset, 0.0)
@@ -152,6 +161,7 @@ class PaperBroker(Broker):
         if pos.side == "long":
             if current_price <= pos.sl_price:
                 self.close_position(asset, current_price)
+                self.last_stop_at[asset] = datetime.now(tz=UTC).isoformat()
                 return "sl"
             if current_price >= pos.tp_price:
                 self.close_position(asset, current_price)
@@ -159,9 +169,17 @@ class PaperBroker(Broker):
         else:
             if current_price >= pos.sl_price:
                 self.close_position(asset, current_price)
+                self.last_stop_at[asset] = datetime.now(tz=UTC).isoformat()
                 return "sl"
             if current_price <= pos.tp_price:
                 self.close_position(asset, current_price)
                 return "tp"
 
         return None
+
+    def is_in_cooldown(self, asset: str, cooldown_hours: float) -> bool:
+        ts = self.last_stop_at.get(asset)
+        if not ts:
+            return False
+        last = datetime.fromisoformat(ts)
+        return (datetime.now(tz=UTC) - last).total_seconds() / 3600 < cooldown_hours

@@ -24,7 +24,15 @@ def get_forecast(asset: str, timeframe: str, ohlcv_df: pd.DataFrame) -> dict:
         split = int(len(df_prophet) * 0.85)
         train, test = df_prophet.iloc[:split], df_prophet.iloc[split:]
 
-        m = Prophet(daily_seasonality=False, weekly_seasonality=True, yearly_seasonality=False)
+        # uncertainty_samples=0 skips the posterior-interval sampling (we only
+        # use yhat) and weekly_seasonality=False drops a component that adds
+        # little on hourly crypto — both materially speed up each fit.
+        m = Prophet(
+            daily_seasonality=False,
+            weekly_seasonality=False,
+            yearly_seasonality=False,
+            uncertainty_samples=0,
+        )
         m.fit(train)
 
         future = m.make_future_dataframe(periods=len(test) + 1, freq="h")

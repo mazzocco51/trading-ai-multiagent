@@ -52,6 +52,24 @@ class Settings(BaseSettings):
     max_daily_drawdown_pct: float = Field(default=0.05)  # kill-switch at 5%
     max_holding_hours: int = Field(default=48)           # time-based exit
 
+    # Trend filter (regime gate)
+    trend_filter_enabled: bool = Field(default=True)
+    trend_ema_period: int = Field(default=50)
+
+    # Cooldown after a stop-loss before re-opening the same asset
+    cooldown_hours_after_stop: int = Field(default=6)
+
+    # Sentiment agent: only act on extreme Fear & Greed readings
+    sentiment_extreme_only: bool = Field(default=True)
+    sentiment_extreme_threshold: int = Field(default=25)
+
+    # Reflection: distil lessons after every N closed trades
+    reflection_every_n_trades: int = Field(default=5)
+
+    # Backtest: refit the (slow) Prophet forecast at most every N bars and reuse
+    # the value in between. Live trading is unaffected (one fit per hourly cycle).
+    forecast_refit_every: int = Field(default=24)
+
     # Agent weights for PortfolioManager (must sum to 1.0)
     agent_weights: dict = Field(
         default={

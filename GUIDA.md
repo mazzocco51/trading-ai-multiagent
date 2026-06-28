@@ -216,13 +216,55 @@ ultime 50 chiuse, e il **consenso degli agenti con il ragionamento** di ognuno.
 
 Esiste anche una vecchia dashboard **Streamlit** (`dashboard/app.py`) come alternativa locale.
 
-## 13. Backtest
+## 13. Backtest e risultati
 
+### Come funziona
 ```bash
+# singola finestra
 python -m app.backtest --start 2024-01-01 --end 2024-06-30
+# confronto filtro di trend ON vs OFF su una finestra
+python -m app.backtest --start 2022-01-01 --end 2022-06-30 --compare-trend-filter
 ```
-Riesegue dati storici nello stesso orchestrator → report con P&L, win rate, max drawdown,
-accuratezza forecast. (In sviluppo: report numerico completo.)
+Il backtest rigioca dati storici (OHLCV via ccxt) nello **stesso orchestrator** del live e
+salva un report in `reports/*.{md,json}` con: PnL%, rendimento buy & hold, **alpha**, Sharpe
+(annualizzato), max drawdown, win rate, profit factor, n. trade.
+
+**Modalità deterministica.** In backtest l'LLM è disattivato: ogni agente deriva il proprio
+`AgentView` **direttamente dai dati** (technical da MACD/RSI/pivot, forecast da Prophet,
+sentiment da F&G, ecc.) e il PortfolioManager aggrega via fallback a regole. Questo rende il
+backtest veloce, deterministico e riproducibile (l'LLM serve in live, non per valutare la
+strategia). Il forecast Prophet è **throttlato** (`forecast_refit_every`, default 24 barre):
+ri-allenarlo ad ogni barra oraria renderebbe il backtest impraticabile (~4000 fit).
+
+### Cosa dicono i numeri (onestamente)
+
+Backtest su tre regimi di mercato (BTC/USDT, 1h, modalità deterministica):
+
+| Finestra | Filtro | PnL% | Buy&Hold% | Alpha | Sharpe | MaxDD% | Win% | Profit factor | N trade |
+|---|---|---|---|---|---|---|---|---|---|
+| Bear 22 H1 | **ON** | −5.10 | −57.05 | **+51.95** | 1.38 | 17.1 | 36.4 | **1.02** | 184 |
+| Bear 22 H1 | OFF | −5.17 | −57.05 | +51.88 | 0.87 | 15.8 | 30.9 | 0.76 | 97 |
+| Bull 23→24 | **ON** | −6.53 | +158.87 | −165.40 | 1.57 | 13.6 | 29.5 | 0.99 | 254 |
+| Bull 23→24 | OFF | −7.83 | +158.87 | −166.70 | 1.60 | 14.4 | 33.0 | 0.95 | 303 |
+| Choppy 24 | **ON** | −0.14 | +50.00 | −50.14 | 1.66 | 13.3 | 35.3 | 0.93 | 153 |
+| Choppy 24 | OFF | −7.92 | +50.00 | −57.92 | 1.65 | 13.6 | 30.2 | 0.92 | 192 |
+
+**Interpretazione:**
+- **È una strategia difensiva.** Perde poco in ogni regime (−5% / −6,5% / ~0%) e l'unico alpha
+  positivo è nel **crash** (Bear: −5% mentre BTC fa −57%). L'edge è la **protezione al ribasso**
+  (kill-switch + filtro di trend + stop obbligatori), non battere il mercato.
+- **In bull sottoperforma** il buy & hold di molto: per scelta sta a bassa esposizione e viene
+  cappata dal kill-switch → non cavalca i rialzi.
+- **Il filtro di trend (A) migliora la qualità in tutte le finestre**: profit factor e win rate
+  più alti ovunque (es. Bear 0.76→1.02), e PnL migliore in tutte e tre. È un miglioramento
+  robusto, non da una singola finestra.
+- **Net-negativo ovunque**: profit factor ~0,93–1,02 = sostanzialmente pari lordo, poi le fee
+  (100–300 trade) lo spingono in leggera perdita. Non è una macchina da soldi — ed è giusto
+  dichiararlo.
+
+> Caveat metodologici: modalità deterministica (≠ comportamento LLM live), poche finestre, una
+> sola coppia (BTC). Il backtest è **illustrativo del comportamento**, non una promessa di
+> performance. La finestra "Choppy" 2024 in realtà ha fatto +50% b&h (non perfettamente laterale).
 
 ---
 

@@ -1,4 +1,4 @@
-"""Tests for the backtest module (M8)."""
+"""Tests for the backtest module."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -6,7 +6,12 @@ from unittest.mock import MagicMock
 import numpy as np
 import pandas as pd
 
-from app.backtest import BacktestResult, run_backtest, run_backtest_multi
+from app.backtest import (
+    BacktestResult,
+    _NoLLMGateway,
+    run_backtest,
+    run_backtest_multi,
+)
 from app.config import Settings
 from app.llm.providers.base import LLMResponse
 
@@ -170,3 +175,73 @@ def test_run_backtest_multi():
     assert all(isinstance(r, BacktestResult) for r in results)
     assert results[0].asset == "BTC/USDT"
     assert results[1].asset == "ETH/USDT"
+
+
+# ---------------------------------------------------------------------------
+# Extended metrics (D1)
+# ---------------------------------------------------------------------------
+
+def test_profit_factor_positive():
+    result = BacktestResult(
+        asset="BTC/USDT",
+        trades=[{"pnl": 10.0}, {"pnl": 5.0}, {"pnl": -2.0}],
+    )
+    assert result.profit_factor > 1.0
+
+
+def test_profit_factor_no_losses():
+    result = BacktestResult(
+        asset="BTC/USDT",
+        trades=[{"pnl": 10.0}, {"pnl": 5.0}],
+    )
+    assert result.profit_factor == float("inf")
+
+
+def test_sharpe_flat_equity():
+    result = BacktestResult(
+        asset="BTC/USDT",
+        equity_curve=[{"step": i, "balance": 1000.0} for i in range(10)],
+    )
+    assert result.sharpe == 0.0
+
+
+def test_sharpe_positive_trend():
+    result = BacktestResult(
+        asset="BTC/USDT",
+        equity_curve=[
+            {"step": i, "balance": 1000.0 * (1.01 ** i)} for i in range(20)
+        ],
+    )
+    assert result.sharpe > 0.0
+
+
+def test_no_llm_gateway_returns_hold():
+    resp = _NoLLMGateway().complete("sys", "usr")
+    assert "hold" in resp.content
+
+
+def test_run_backtest_produces_summary_keys():
+    df = _make_ohlcv(120)
+    result = run_backtest(
+        "BTC/USDT", "1h", df, Settings(), _NoLLMGateway(), window=100, step=1
+    )
+    summary = result.summary()
+    for key in [
+        "asset",
+        "initial_balance",
+        "final_balance",
+        "pnl",
+        "pnl_pct",
+        "n_trades",
+        "win_rate",
+        "max_drawdown_pct",
+        "profit_factor",
+        "sharpe",
+    ]:
+        assert key in summary
+
+
+def test_btc_bh_return_pct_in_summary():
+    result = BacktestResult(asset="BTC/USDT")
+    result.btc_bh_return_pct = 12.5
+    assert result.summary()["btc_bh_return_pct"] == 12.5

@@ -6,7 +6,13 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.agents.base import AgentView
-from app.persistence.models import AgentViewLog, BrokerState, Decision, EquitySnapshot
+from app.persistence.models import (
+    AgentViewLog,
+    BrokerState,
+    Decision,
+    EquitySnapshot,
+    Lesson,
+)
 
 
 def load_broker_state(session: Session) -> dict | None:
@@ -147,3 +153,21 @@ def get_equity_history(session: Session, limit: int = 200) -> list[dict]:
         }
         for s in snapshots
     ]
+
+
+def add_lessons(session: Session, texts: list[str]) -> None:
+    """Persist a batch of lesson strings from the reflection agent."""
+    now = datetime.now(tz=UTC).isoformat()
+    for text in texts:
+        session.add(Lesson(created_at=now, text=text))
+
+
+def get_recent_lessons(session: Session, limit: int = 8) -> list[str]:
+    """Return the most-recent lesson texts (newest first)."""
+    rows = (
+        session.query(Lesson)
+        .order_by(Lesson.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [r.text for r in rows]

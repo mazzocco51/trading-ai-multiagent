@@ -91,6 +91,16 @@ class BrokerState(Base):
     )
 
 
+class Lesson(Base):
+    __tablename__ = "lessons"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[str] = mapped_column(
+        default=lambda: datetime.now(tz=UTC).isoformat()
+    )
+    text: Mapped[str]
+
+
 def init_db(database_url: str):
     """Create all tables and return the engine."""
     from sqlalchemy import Engine

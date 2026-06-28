@@ -1,0 +1,31 @@
+{
+  "asset": "BTC/USDT",
+  "period": "2022-01-01 \u2192 2022-06-30",
+  "timeframe": "1h",
+  "trend_filter_on": {
+    "asset": "BTC/USDT",
+    "initial_balance": 10000.0,
+    "final_balance": 9491.35,
+    "pnl": -508.65,
+    "pnl_pct": -5.09,
+    "n_trades": 130,
+    "win_rate": 38.46,
+    "max_drawdown_pct": 18.45,
+    "profit_factor": 0.916,
+    "sharpe": 1.256,
+    "btc_bh_return_pct": -57.05
+  },
+  "trend_filter_off": {
+    "asset": "BTC/USDT",
+    "initial_balance": 10000.0,
+    "final_balance": 9499.13,
+    "pnl": -500.87,
+    "pnl_pct": -5.01,
+    "n_trades": 142,
+    "win_rate": 34.51,
+    "max_drawdown_pct": 17.64,
+    "profit_factor": 0.749,
+    "sharpe": 1.196,
+    "btc_bh_return_pct": -57.05
+  }
+}

@@ -16,8 +16,15 @@ _PROMPT = (Path(__file__).parent.parent.parent / "prompts" / "sentiment.md").rea
 class SentimentAgent(BaseAgent):
     name = "sentiment"
 
-    def __init__(self, gateway: LLMGateway) -> None:
+    def __init__(
+        self,
+        gateway: LLMGateway,
+        extreme_only: bool = False,
+        extreme_threshold: int = 25,
+    ) -> None:
         self.gateway = gateway
+        self.extreme_only = extreme_only
+        self.extreme_threshold = extreme_threshold
 
     def analyze(self, ctx: MarketContext) -> AgentView:
         fng = ctx.fear_and_greed
@@ -29,6 +36,20 @@ class SentimentAgent(BaseAgent):
                 confidence=0.0,
                 rationale="fear & greed data unavailable",
             )
+
+        # Only act on extreme Fear & Greed readings; stay neutral in mid-range.
+        fng_value = fng.get("value")
+        if self.extreme_only and fng_value is not None:
+            val = int(fng_value)
+            if self.extreme_threshold <= val <= (100 - self.extreme_threshold):
+                return AgentView(
+                    agent=self.name,
+                    asset=ctx.asset,
+                    signal="neutral",
+                    confidence=0.0,
+                    rationale="F&G not in extreme zone",
+                )
+
         user_msg = json.dumps({
             "asset": ctx.asset,
             "fear_and_greed_value": fng.get("value"),

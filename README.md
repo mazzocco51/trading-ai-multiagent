@@ -7,7 +7,9 @@
 ![Stack: 100% Free](https://img.shields.io/badge/Stack-100%25%20Free-brightgreen)
 ![Built with Claude Code + Pi Agent](https://img.shields.io/badge/Built%20with-Claude%20Code%20%2B%20Pi%20Agent-D97757)
 
-> A small distributed system where **a team of LLM agents** independently analyse the market, vote, and a deterministic risk layer turns that vote into **simulated (paper) trades**. Built as a **computer-science portfolio project** to practise agentic architecture, autonomous-agent orchestration, and zero-cost cloud ops — not to make money.
+> A small distributed system where **a team of LLM agents** independently analyse the market, vote, and a deterministic risk layer turns that vote into **simulated (paper) trades**. Built as a **computer-science portfolio project** to practise agentic architecture, autonomous-agent orchestration, and zero-cost cloud ops.
+
+**The design goal is capital preservation — defending against crashes, not chasing gains.** Backtested across three market regimes, it lost ~5% in the 2022 bear market while simply holding BTC lost 57% (more in [What the backtest shows](#what-the-backtest-shows-and-what-it-doesnt)).
 
 It runs **fully autonomously in the cloud on a 100% free stack** (free LLM tiers, free Postgres, free CI/CD and hosting) and **never touches real money**.
 
@@ -32,6 +34,22 @@ The trading domain is just the vehicle. The actual goal was hands-on practice wi
 Every cycle, for each asset, a **data layer** assembles a `MarketContext` (prices, indicators, a statistical forecast, market sentiment, on-chain flows, news). Five **specialist agents** each read that context and return a structured opinion (`long`/`short`/`neutral` + confidence + rationale) via an LLM call. A **Portfolio Manager** aggregates the votes (confidence-weighted, **re-normalised over the agents that actually had data**) into a single trade idea. A **Risk Manager** — plain Python, no LLM — validates it against hard limits (stop-loss/take-profit, exposure caps, a daily-drawdown kill-switch, a max-holding-time exit) and either executes it on the paper broker or vetoes it. Everything is persisted to Postgres and rendered to a live dashboard.
 
 > **Why a team of agents instead of one prompt?** Each agent gets a small focused prompt (fewer hallucinations); a broken data source degrades **one** vote instead of the whole decision; and the safety limits live in deterministic code the model can't talk its way around.
+
+---
+
+## What the backtest shows (and what it doesn't)
+
+The desk was backtested across three market regimes (BTC/USDT, deterministic signal mode). The honest takeaway: **it is a defensive, capital-preserving strategy — it shines when the market crashes and deliberately sits out euphoric rallies.**
+
+| Market regime | Buy & hold | The desk | Outcome |
+|---|---|---|---|
+| **Bear** — 2022 H1 | **−57%** | **−5%** | **protected capital (+52 pts vs market)** |
+| Bull — late 2023→24 | +159% | −7% | underperforms (stays low-exposure by design) |
+| Choppy — 2024 | mixed | ≈ flat | preserves capital |
+
+In the 2022 crash the desk lost ~5% while holding BTC lost 57% — that downside protection (daily kill-switch + trend filter + mandatory stop-loss) is the entire point. In strong rallies it underperforms buy & hold because it deliberately keeps exposure low. It is **not a money-printer**, and the dashboard reports this honestly. The trend filter (added after the first live results) improves win rate and profit factor in **every** regime tested.
+
+> Caveat: backtests use a deterministic signal mode and a handful of windows — illustrative of behaviour, not a performance promise.
 
 ---
 
