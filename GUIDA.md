@@ -225,6 +225,10 @@ python -m app.backtest --start 2024-01-01 --end 2024-06-30
 # confronto filtro di trend ON vs OFF su una finestra
 python -m app.backtest --start 2022-01-01 --end 2022-06-30 --compare-trend-filter
 ```
+```bash
+# A/B delle feature sperimentali (dibattito + pesi adattivi) sulle 3 finestre di riferimento
+python -m app.backtest --compare-features --forecast-every 48
+```
 Il backtest rigioca dati storici (OHLCV via ccxt) nello **stesso orchestrator** del live e
 salva un report in `reports/*.{md,json}` con: PnL%, rendimento buy & hold, **alpha**, Sharpe
 (annualizzato), max drawdown, win rate, profit factor, n. trade.
@@ -266,6 +270,89 @@ Backtest su tre regimi di mercato (BTC/USDT, 1h, modalità deterministica):
 > sola coppia (BTC). Il backtest è **illustrativo del comportamento**, non una promessa di
 > performance. La finestra "Choppy" 2024 in realtà ha fatto +50% b&h (non perfettamente laterale).
 
+### Feature sperimentali (default OFF, A/B-testate)
+
+Due feature dietro flag, **attive di default** (migliorano lo Sharpe in tutte le finestre
+testate e sistemano la sottoperformance in bull). Puoi disattivarle nel `.env` per tornare al
+comportamento base:
+
+```env
+DEBATE_ENABLED=false            # disattiva il dibattito Bull vs Bear
+ADAPTIVE_WEIGHTS_ENABLED=false  # disattiva i pesi adattivi al regime
+```
+
+> ⚠️ **Caveat onesto:** questi flag sono tarati su **3 finestre e una sola coppia (BTC)** →
+> rischio di overfitting. Migliorano le metriche nei test, ma andrebbero validati su più
+> mercati e periodi (walk-forward) prima di considerarli robusti.
+
+**1) Dibattito Bull vs Bear** (`debate_enabled`, stile TradingAgents). Prima che il
+PortfolioManager aggreghi, un agente **BULL** (`prompts/bull.md`) argomenta la tesi long e un
+**BEAR** (`prompts/bear.md`) la tesi short (1-2 round), entrambi vincolati alle evidenze delle
+5 AgentView. Il PM fa da **giudice**: riceve il transcript insieme al voto pesato e decide.
+Il transcript è persistito nella tabella `debate_logs` (collegata alla decisione) e mostrato
+nella dashboard Streamlit come riassunto bull vs bear. In **backtest** (deterministico, no LLM)
+il dibattito è sostituito da un **proxy deterministico**: la conviction viene penalizzata
+(fino a `debate_max_penalty`, default −50%) quando le evidenze bull e bear sono **entrambe
+forti** (alto disaccordo/dispersione tra agenti) e resta invariata quando il quadro è
+unilaterale — così il flag è misurabile offline (`app/agents/debate.py`).
+
+**2) Pesi adattivi al regime** (`adaptive_weights_enabled`). La ricerca sugli ensemble
+multi-agente suggerisce che pesi fissi sono subottimali tra regimi diversi. Il modulo
+`app/agents/adaptive_weights.py` calcola la **volatilità realizzata** (dev. std dei rendimenti
+per barra sulle ultime `adaptive_vol_lookback=24` barre, già derivabile dall'OHLCV del
+MarketContext) e classifica il regime: **alta volatilità** (≥ `adaptive_vol_high_pct=0.9%`) →
+più peso a sentiment/news, meno al technical; **calma** (≤ `adaptive_vol_low_pct=0.4%`) →
+viceversa. Tilt moltiplicativo `adaptive_shift=0.35` sui pesi base (technical 0.35, forecast
+0.20, sentiment 0.20, onchain 0.15, news 0.10), con **ri-normalizzazione sempre a 1.0**.
+Deterministico → backtestabile. Vale sia in live sia in backtest.
+
+#### Risultati A/B (BTC/USDT 1h, deterministico, forecast ogni 48 barre)
+
+Report completo: `reports/compare_features_BTCUSDT.{md,json}`.
+
+**Bear 2022 (b&h −57.05%)**
+
+| Combo | PnL % | Alpha % | Sharpe | MaxDD % | Win % | PF | Trade |
+|---|---|---|---|---|---|---|---|
+| baseline | −1.86 | +55.19 | 1.22 | 18.1 | 37.4 | 0.69 | 107 |
+| debate | −1.56 | +55.49 | 1.25 | 18.1 | 37.1 | 0.70 | 97 |
+| adaptive | −3.04 | +54.01 | 1.28 | 18.4 | 35.8 | 0.81 | 134 |
+| both | −1.93 | +55.12 | 1.31 | 18.2 | 35.6 | 0.78 | 118 |
+
+**Bull 2023→24 (b&h +158.87%)**
+
+| Combo | PnL % | Alpha % | Sharpe | MaxDD % | Win % | PF | Trade |
+|---|---|---|---|---|---|---|---|
+| baseline | −10.13 | −169.00 | 1.06 | 15.6 | 53.8 | 1.48 | 80 |
+| debate | −10.39 | −169.26 | 1.09 | 15.6 | 53.3 | 1.57 | 75 |
+| adaptive | **+0.20** | −158.67 | 1.53 | 15.5 | 34.5 | 1.61 | 171 |
+| both | **+3.58** | −155.29 | 1.55 | 15.5 | 34.3 | 1.59 | 140 |
+
+**Choppy 2024 (b&h +50.00%)**
+
+| Combo | PnL % | Alpha % | Sharpe | MaxDD % | Win % | PF | Trade |
+|---|---|---|---|---|---|---|---|
+| baseline | +4.85 | −45.15 | 1.13 | 15.2 | 46.2 | 1.85 | 52 |
+| debate | +4.61 | −45.39 | 1.15 | 15.2 | 47.7 | 1.80 | 44 |
+| adaptive | +3.19 | −46.81 | 1.29 | 15.3 | 42.4 | 1.76 | 92 |
+| both | +3.91 | −46.09 | 1.29 | 15.2 | 45.3 | 1.90 | 64 |
+
+**Lettura onesta dei risultati:**
+- **Pesi adattivi: il miglioramento c'è ma viene quasi tutto dal bull.** PnL medio sulle tre
+  finestre: baseline −2.4%, adaptive +0.1%, both +1.9%. In Bull passa da −10.1% a +0.2%
+  (+3.6% con entrambi i flag) e lo Sharpe sale in **tutte** le finestre (es. 1.06→1.53 in
+  Bull). In Bear e Choppy però il PnL peggiora leggermente (−1.9→−3.0 e +4.9→+3.2): più trade,
+  qualità media più bassa. Non è un miglioramento uniforme.
+- **Dibattito (proxy): effetto piccolo e coerente col design.** Taglia i trade più incerti
+  (−5÷10% di trade in ogni finestra), Sharpe leggermente su ovunque, PnL quasi invariato
+  (±0.3 punti). In backtest deterministico i segnali contrastanti sono rari (technical vs
+  forecast), quindi il proxy interviene poco: il valore vero del dibattito va verificato in
+  live con l'LLM. Onestamente: da solo, in backtest, non sposta le metriche.
+- **Combinazione (both): il profilo migliore nel complesso** — Sharpe più alto in tutte e tre
+  le finestre e PnL medio migliore — ma il vantaggio dipende dalla finestra bull; su bear/choppy
+  il baseline resta competitivo. Con 3 finestre e una sola coppia il rischio di overfitting
+  alla finestra è concreto: per questo entrambi i flag restano **OFF di default**.
+
 ---
 
 ## 14. Deploy 24/7 (gratis)
@@ -298,12 +385,13 @@ app/
 ├── data/              # prices (multi-exchange), stocks (yfinance), indicators,
 │                      #   forecast, sentiment, whale, news, context, asset_registry
 ├── agents/            # 5 specialisti + agent_selector + PortfolioManager + RiskManager
+│                      #   + debate (bull/bear) + adaptive_weights (regime di volatilità)
 ├── llm/               # gateway multi-provider con fallback + budget
 ├── broker/            # base, paper (crypto), paper_stock (azioni), hyperliquid (opz.)
 └── persistence/       # modelli SQLAlchemy + repository (incl. stato broker)
 dashboard/             # template.html + build_html.py (HTML statica) + app.py (Streamlit)
 prompts/               # system prompt di ogni agente (.md versionati)
-tests/                 # pytest (~60 test), sempre su broker paper
+tests/                 # pytest (126 test), sempre su broker paper
 .github/workflows/     # ci.yml (lint+test) + trade-loop.yml (ciclo + deploy Pages)
 ```
 

@@ -49,6 +49,29 @@ try:
 except Exception as e:
     st.warning(f"Could not load decisions: {e}")
 
+# Bull vs Bear debates (only populated when DEBATE_ENABLED=true)
+st.subheader("Bull vs Bear Debates")
+try:
+    deb_df = pd.read_sql(
+        """
+        SELECT b.timestamp, b.asset, d.action, b.bull_summary, b.bear_summary
+        FROM debate_logs b
+        LEFT JOIN decisions d ON d.id = b.decision_id
+        ORDER BY b.timestamp DESC LIMIT 20
+        """,
+        engine,
+    )
+    if not deb_df.empty:
+        for _, row in deb_df.iterrows():
+            with st.expander(f"{row['timestamp']} — {row['asset']} → {row['action']}"):
+                col_bull, col_bear = st.columns(2)
+                col_bull.markdown(f"**🐂 Bull**\n\n{row['bull_summary']}")
+                col_bear.markdown(f"**🐻 Bear**\n\n{row['bear_summary']}")
+    else:
+        st.info("No debates yet (enable DEBATE_ENABLED=true).")
+except Exception as e:
+    st.info(f"No debate data: {e}")
+
 # Agent views
 st.subheader("Latest Agent Views")
 try:

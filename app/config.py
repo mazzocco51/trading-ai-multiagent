@@ -70,6 +70,21 @@ class Settings(BaseSettings):
     # the value in between. Live trading is unaffected (one fit per hourly cycle).
     forecast_refit_every: int = Field(default=24)
 
+    # Bull vs Bear debate before PM aggregation (default OFF, backward compatible).
+    # Live: LLM bull/bear argue, PM judges transcript + weighted vote.
+    # Backtest (deterministic): proxy penalises conviction on high agent disagreement.
+    debate_enabled: bool = Field(default=True)
+    debate_rounds: int = Field(default=1)          # 1-2 rounds bull+bear
+    debate_max_penalty: float = Field(default=0.5)  # max conviction cut at full split
+
+    # Regime-adaptive agent weights (default OFF, backward compatible).
+    # High volatility → shift weight from technical to sentiment/news; calm → reverse.
+    adaptive_weights_enabled: bool = Field(default=True)
+    adaptive_vol_lookback: int = Field(default=24)      # bars for realized vol
+    adaptive_vol_low_pct: float = Field(default=0.004)  # per-bar return std, calm below
+    adaptive_vol_high_pct: float = Field(default=0.009)  # per-bar return std, high above
+    adaptive_shift: float = Field(default=0.35)         # multiplicative tilt (0..1)
+
     # Agent weights for PortfolioManager (must sum to 1.0)
     agent_weights: dict = Field(
         default={

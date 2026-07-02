@@ -75,6 +75,28 @@ class AgentViewLog(Base):
     )
 
 
+class DebateLog(Base):
+    """Bull-vs-bear debate transcript attached to a Decision (debate feature).
+
+    Separate table (not a Decision column) so existing SQLite files keep
+    working: create_all() adds new tables but never alters existing ones.
+    """
+
+    __tablename__ = "debate_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    decision_id: Mapped[int | None] = mapped_column(
+        ForeignKey("decisions.id"), nullable=True, default=None
+    )
+    asset: Mapped[str]
+    timestamp: Mapped[str] = mapped_column(
+        default=lambda: datetime.now(tz=UTC).isoformat()
+    )
+    bull_summary: Mapped[str] = mapped_column(default="")
+    bear_summary: Mapped[str] = mapped_column(default="")
+    transcript_json: Mapped[str] = mapped_column(default="[]")
+
+
 class BrokerState(Base):
     """Single-row table holding the serialised PaperBroker state (JSON).
 

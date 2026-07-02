@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -42,6 +42,7 @@ class PortfolioManagerAgent(BaseAgent):
         ctx: MarketContext,
         open_position: dict | None = None,
         lessons: list[str] | None = None,
+        debate: Any | None = None,
     ) -> TradeIdea:
         signal_map = {"long": 1.0, "short": -1.0, "neutral": 0.0}
         weighted_score = 0.0
@@ -84,6 +85,8 @@ class PortfolioManagerAgent(BaseAgent):
             "current_indicators": ctx.indicators,
             "current_position": open_position,  # {"side","entry_price","unrealized_pct"} or null
             "lessons_learned": lessons or [],
+            # Bull-vs-bear debate transcript (null when the debate feature is off)
+            "debate_transcript": debate.as_dicts() if debate is not None else None,
         })
 
         try:

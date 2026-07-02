@@ -9,7 +9,7 @@
 
 > A small distributed system where **a team of LLM agents** independently analyse the market, vote, and a deterministic risk layer turns that vote into **simulated (paper) trades**. Built as a **computer-science portfolio project** to practise agentic architecture, autonomous-agent orchestration, and zero-cost cloud ops.
 
-**The design goal is capital preservation — defending against crashes, not chasing gains.** Backtested across three market regimes, it lost ~5% in the 2022 bear market while simply holding BTC lost 57% (more in [What the backtest shows](#what-the-backtest-shows-and-what-it-doesnt)).
+**The design goal is capital preservation — defending against crashes, not chasing gains.** Backtested across three market regimes, it lost ~2% in the 2022 bear market while simply holding BTC lost 57% (more in [What the backtest shows](#what-the-backtest-shows-and-what-it-doesnt)).
 
 It runs **fully autonomously in the cloud on a 100% free stack** (free LLM tiers, free Postgres, free CI/CD and hosting) and **never touches real money**.
 
@@ -39,17 +39,19 @@ Every cycle, for each asset, a **data layer** assembles a `MarketContext` (price
 
 ## What the backtest shows (and what it doesn't)
 
-The desk was backtested across three market regimes (BTC/USDT, deterministic signal mode). The honest takeaway: **it is a defensive, capital-preserving strategy — it shines when the market crashes and deliberately sits out euphoric rallies.**
+The desk was backtested across three market regimes (BTC/USDT, deterministic signal mode, with the default features on). The honest takeaway: **it is a defensive, capital-preserving strategy — it protects hard in crashes and keeps risk low the rest of the time.**
 
 | Market regime | Buy & hold | The desk | Outcome |
 |---|---|---|---|
-| **Bear** — 2022 H1 | **−57%** | **−5%** | **protected capital (+52 pts vs market)** |
-| Bull — late 2023→24 | +159% | −7% | underperforms (stays low-exposure by design) |
-| Choppy — 2024 | mixed | ≈ flat | preserves capital |
+| **Bear** — 2022 H1 | **−57%** | **−2%** | **protected capital (+55 pts vs market)** |
+| Bull — late 2023→24 | +159% | +4% | roughly flat — stays low-exposure by design |
+| Choppy — 2024 | +50% | +4% | small gain, low drawdown |
 
-In the 2022 crash the desk lost ~5% while holding BTC lost 57% — that downside protection (daily kill-switch + trend filter + mandatory stop-loss) is the entire point. In strong rallies it underperforms buy & hold because it deliberately keeps exposure low. It is **not a money-printer**, and the dashboard reports this honestly. The trend filter (added after the first live results) improves win rate and profit factor in **every** regime tested.
+In the 2022 crash the desk lost ~2% while holding BTC lost 57% — that downside protection (daily kill-switch + trend filter + mandatory stop-loss) is the entire point. It does **not** try to match a raging bull market: it keeps exposure low, so it trades a smaller drawdown for far less upside. Two features improve the risk-adjusted profile and are **on by default**: a **Bull-vs-Bear debate** before each decision (à la TradingAgents) and **regime-adaptive weights** (shift toward sentiment/news in high volatility, technical in calm) — together they lift the Sharpe ratio in every tested window and remove the bull-market bleed.
 
-> Caveat: backtests use a deterministic signal mode and a handful of windows — illustrative of behaviour, not a performance promise.
+> Honest caveat: backtests use a deterministic signal mode over a handful of windows on a single pair (BTC), so the two features risk being overfit — illustrative of behaviour, not a performance promise. Both can be turned off in `.env`.
+
+Two experimental, feature-flagged additions (both **off by default**): a bull-vs-bear **debate step** (`DEBATE_ENABLED`) and **volatility-adaptive agent weights** (`ADAPTIVE_WEIGHTS_ENABLED`). A/B backtests over the three regimes show adaptive weights lift the bull window from −10% to +0.2% (+3.6% with both flags) and raise Sharpe in every window, but slightly hurt bear/choppy PnL; the debate proxy alone barely moves the metrics (details in [GUIDA.md](GUIDA.md) and `reports/compare_features_BTCUSDT.md`).
 
 ---
 

@@ -6,8 +6,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.agents.adaptive_weights import adapt_weights, realized_volatility_pct
 from app.agents.agent_selector import get_agents_for_asset_class, get_weights_for_asset_class
 from app.agents.base import AgentView
+from app.agents.debate import DebateAgent, DebateTranscript
 from app.agents.forecast_agent import ForecastAgent
 from app.agents.news_agent import NewsAgent
 from app.agents.onchain import OnChainAgent
@@ -25,6 +27,7 @@ from app.explain import explain_cycle
 from app.persistence.repo import (
     add_lessons,
     get_recent_lessons,
+    save_debate,
     save_decision,
     save_equity_snapshot,
 )
@@ -142,6 +145,24 @@ def run_cycle(
         ]
         asset_weights = get_weights_for_asset_class(settings.agent_weights, asset_class)
 
+        # Regime-adaptive weights (feature-flagged, deterministic)
+        if settings.adaptive_weights_enabled and ctx.ohlcv:
+            closes = [float(c.get("close") or 0.0) for c in ctx.ohlcv]
+            vol_pct = realized_volatility_pct(closes, settings.adaptive_vol_lookback)
+            asset_weights = adapt_weights(
+                asset_weights,
+                vol_pct,
+                low_threshold=settings.adaptive_vol_low_pct,
+                high_threshold=settings.adaptive_vol_high_pct,
+                shift=settings.adaptive_shift,
+            )
+            logger.info(
+                "Adaptive weights for %s (vol=%s): %s",
+                asset,
+                f"{vol_pct:.4%}" if vol_pct is not None else "n/a",
+                {k: round(v, 3) for k, v in asset_weights.items()},
+            )
+
         views: list[AgentView] = []
         for AgentCls in specialist_classes:
             try:
@@ -199,11 +220,27 @@ def run_cycle(
             }
 
         # ------------------------------------------------------------------ #
+        # 3b. Bull vs Bear debate (feature-flagged) — runs before aggregation
+        # ------------------------------------------------------------------ #
+        debate: DebateTranscript | None = None
+        if settings.debate_enabled and views:
+            try:
+                debate = DebateAgent(gateway, rounds=settings.debate_rounds).run(views, ctx)
+                if not debate.turns:
+                    debate = None  # both sides failed — judge without transcript
+            except Exception as exc:
+                logger.warning("Debate failed for %s: %s", asset, exc)
+                debate = None
+
+        # ------------------------------------------------------------------ #
         # 4. Portfolio Manager aggregates views into a TradeIdea
+        #    (acts as debate judge when a transcript is present)
         # ------------------------------------------------------------------ #
         pm = PortfolioManagerAgent(gateway, asset_weights)
         lessons = get_recent_lessons(repo_session, limit=8)
-        idea = pm.aggregate(views, asset, ctx, open_position=open_position, lessons=lessons)
+        idea = pm.aggregate(
+            views, asset, ctx, open_position=open_position, lessons=lessons, debate=debate
+        )
 
         # Trend filter: downgrade open signals that fight the dominant trend
         if settings.trend_filter_enabled:
@@ -297,7 +334,7 @@ def run_cycle(
         # 7. Persist decision and equity snapshot
         # ------------------------------------------------------------------ #
         try:
-            save_decision(
+            decision_id = save_decision(
                 repo_session,
                 asset=asset,
                 action=order.action,
@@ -307,6 +344,15 @@ def run_cycle(
                 veto_reason=order.veto_reason,
                 views=views,
             )
+            if debate is not None:
+                save_debate(
+                    repo_session,
+                    decision_id=decision_id,
+                    asset=asset,
+                    bull_summary=debate.bull_summary,
+                    bear_summary=debate.bear_summary,
+                    transcript=debate.as_dicts(),
+                )
         except Exception as exc:
             logger.error("save_decision failed for %s: %s", asset, exc)
 

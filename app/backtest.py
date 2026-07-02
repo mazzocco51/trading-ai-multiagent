@@ -8,6 +8,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.agents.adaptive_weights import adapt_weights, realized_volatility_pct
+from app.agents.debate import apply_debate_proxy
 from app.agents.deterministic import deterministic_views
 from app.agents.forecast_agent import ForecastAgent
 from app.agents.news_agent import NewsAgent
@@ -142,6 +144,7 @@ def run_backtest(
     step: int = 1,
     deterministic: bool = False,
     forecast_every: int | None = None,
+    forecast_cache: dict | None = None,
 ) -> BacktestResult:
     """Replay historical OHLCV through the full multi-agent pipeline.
 
@@ -162,6 +165,17 @@ def run_backtest(
     forecast_every:  In deterministic mode, recompute the (slow) Prophet forecast
                 only every N steps and reuse it in between. ``None`` falls back to
                 ``settings.forecast_refit_every``; set 0 to disable the forecast.
+    forecast_cache:  Optional dict shared across runs on the SAME data: caches the
+                forecast per step index so A/B comparisons don't refit Prophet
+                for every flag combination.
+
+    Feature flags (from ``settings``), both default OFF:
+    - ``debate_enabled``: applies the deterministic debate proxy — conviction is
+      penalised when bull and bear evidence are both strong (high agent
+      disagreement) and untouched when one-sided. Backtests never call the LLM
+      debate; the proxy makes the flag measurable offline.
+    - ``adaptive_weights_enabled``: tilts agent weights per step based on the
+      realized-volatility regime of the current OHLCV window (sum stays 1.0).
 
     Returns
     -------
@@ -218,11 +232,16 @@ def run_backtest(
         # only every ``forecast_every`` steps and reuse the cached value between.
         if deterministic and forecast_every > 0:
             if (i - window) % forecast_every == 0:
-                try:
-                    cached_forecast = get_forecast(asset, timeframe, df_slice)
-                except Exception as exc:
-                    logger.debug("Forecast failed at step %d: %s", i, exc)
-                    cached_forecast = {"degraded": True}
+                if forecast_cache is not None and i in forecast_cache:
+                    cached_forecast = forecast_cache[i]
+                else:
+                    try:
+                        cached_forecast = get_forecast(asset, timeframe, df_slice)
+                    except Exception as exc:
+                        logger.debug("Forecast failed at step %d: %s", i, exc)
+                        cached_forecast = {"degraded": True}
+                    if forecast_cache is not None:
+                        forecast_cache[i] = cached_forecast
             forecast = cached_forecast
         else:
             forecast = {"degraded": True}
@@ -277,8 +296,27 @@ def run_backtest(
         # ------------------------------------------------------------------
         # Portfolio Manager → Trade Idea (+ trend filter gate)
         # ------------------------------------------------------------------
+        # Regime-adaptive weights (feature-flagged, deterministic per step)
+        if settings.adaptive_weights_enabled:
+            closes = [float(c) for c in df_slice["close"].tolist()]
+            vol_pct = realized_volatility_pct(closes, settings.adaptive_vol_lookback)
+            pm_agent.weights = adapt_weights(
+                settings.agent_weights,
+                vol_pct,
+                low_threshold=settings.adaptive_vol_low_pct,
+                high_threshold=settings.adaptive_vol_high_pct,
+                shift=settings.adaptive_shift,
+            )
+
         try:
             idea = pm_agent.aggregate(views, asset, ctx, open_position=open_position)
+            # Debate proxy (feature-flagged): penalise conviction on high
+            # bull/bear disagreement; one-sided inputs pass through unchanged.
+            if settings.debate_enabled:
+                idea = apply_debate_proxy(
+                    idea, views, pm_agent.weights,
+                    max_penalty=settings.debate_max_penalty,
+                )
             if settings.trend_filter_enabled:
                 idea = apply_trend_gate(idea, asset, indicators)
         except Exception as exc:
@@ -508,6 +546,130 @@ def _comparison_table(on: dict, off: dict) -> str:
     return "\n".join(lines)
 
 
+# Reference windows for the feature A/B comparison (same three regimes used
+# in previous evaluations: bear, bull, choppy).
+FEATURE_WINDOWS: dict[str, tuple[str, str]] = {
+    "Bear 2022": ("2022-01-01", "2022-06-30"),
+    "Bull 2023-24": ("2023-10-01", "2024-03-31"),
+    "Choppy 2024": ("2024-08-01", "2024-11-30"),
+}
+
+# (label, debate_enabled, adaptive_weights_enabled)
+FEATURE_COMBOS: list[tuple[str, bool, bool]] = [
+    ("baseline", False, False),
+    ("debate", True, False),
+    ("adaptive", False, True),
+    ("both", True, True),
+]
+
+
+def run_feature_comparison(
+    asset: str,
+    timeframe: str,
+    settings: Settings,
+    forecast_every: int | None,
+    out_dir: Any,
+) -> dict:
+    """A/B the debate proxy and adaptive weights over the reference windows.
+
+    Runs the deterministic backtest for every flag combination on each window,
+    sharing a per-window forecast cache so Prophet is fitted once per step
+    regardless of how many combos run. Writes a combined md+json report to
+    ``out_dir`` and returns the results dict.
+    """
+    import json
+    from pathlib import Path
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    results: dict[str, dict] = {}
+
+    for win_name, (start, end) in FEATURE_WINDOWS.items():
+        logger.info("=== Window %s: %s → %s ===", win_name, start, end)
+        df = _fetch_ohlcv(asset, timeframe, start, end)
+        if df is None or df.empty:
+            logger.error("No OHLCV for window %s — skipping", win_name)
+            continue
+        bh_pct = (float(df.iloc[-1]["close"]) / float(df.iloc[0]["close"]) - 1.0) * 100
+        cache: dict = {}
+        win_results: dict[str, dict] = {
+            "_meta": {
+                "start": start,
+                "end": end,
+                "candles": len(df),
+                "buy_hold_pct": round(bh_pct, 2),
+            }
+        }
+        for label, debate_on, adaptive_on in FEATURE_COMBOS:
+            settings.debate_enabled = debate_on
+            settings.adaptive_weights_enabled = adaptive_on
+            res = run_backtest(
+                asset=asset,
+                timeframe=timeframe,
+                df_ohlcv=df,
+                settings=settings,
+                gateway=_RaisingGateway(),
+                window=100,
+                deterministic=True,
+                forecast_every=forecast_every,
+                forecast_cache=cache,
+            )
+            summary = res.summary()
+            summary["buy_hold_pct"] = round(bh_pct, 2)
+            summary["alpha_pct"] = round(summary["pnl_pct"] - bh_pct, 2)
+            win_results[label] = summary
+            logger.info(
+                "%s / %s: pnl=%.2f%% alpha=%.2f%% trades=%d",
+                win_name, label, summary["pnl_pct"], summary["alpha_pct"],
+                summary["n_trades"],
+            )
+        results[win_name] = win_results
+
+    # Restore defaults so a reused Settings instance is not left mutated
+    settings.debate_enabled = False
+    settings.adaptive_weights_enabled = False
+
+    asset_slug = asset.replace("/", "").replace(":", "")
+    fc = forecast_every if forecast_every is not None else settings.forecast_refit_every
+    lines = [
+        "# Feature comparison — debate proxy & adaptive weights",
+        f"Asset: {asset} | Timeframe: {timeframe} | Mode: deterministic (no LLM) "
+        f"| forecast_every={fc}",
+        "",
+        "Combos: baseline (flags OFF), debate (debate_enabled), "
+        "adaptive (adaptive_weights_enabled), both.",
+        "",
+    ]
+    for win_name, win in results.items():
+        meta = win["_meta"]
+        lines += [
+            f"## {win_name} ({meta['start']} → {meta['end']}) — "
+            f"buy&hold {meta['buy_hold_pct']}%",
+            "",
+            "| Combo | PnL % | B&H % | Alpha % | Sharpe | Max DD % "
+            "| Win rate % | Profit factor | Trades |",
+            "|-------|-------|-------|---------|--------|----------"
+            "|------------|---------------|--------|",
+        ]
+        for label, _, _ in FEATURE_COMBOS:
+            s = win.get(label)
+            if not s:
+                continue
+            lines.append(
+                f"| {label} | {s['pnl_pct']} | {s['buy_hold_pct']} | {s['alpha_pct']} "
+                f"| {s['sharpe']} | {s['max_drawdown_pct']} | {s['win_rate']} "
+                f"| {s['profit_factor']} | {s['n_trades']} |"
+            )
+        lines.append("")
+
+    md_path = out_dir / f"compare_features_{asset_slug}.md"
+    md_path.write_text("\n".join(lines), encoding="utf-8")
+    json_path = out_dir / f"compare_features_{asset_slug}.json"
+    json_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    logger.info("Feature comparison saved to %s and %s", md_path, json_path)
+    return results
+
+
 def main() -> None:
     import argparse
     import json
@@ -517,8 +679,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Backtest the multi-agent trading system"
     )
-    parser.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
-    parser.add_argument("--end", required=True, help="End date YYYY-MM-DD")
+    parser.add_argument(
+        "--start", default=None, help="Start date YYYY-MM-DD (not needed with --compare-features)"
+    )
+    parser.add_argument(
+        "--end", default=None, help="End date YYYY-MM-DD (not needed with --compare-features)"
+    )
     parser.add_argument(
         "--asset", default="BTC/USDT", help="Asset to backtest (default BTC/USDT)"
     )
@@ -554,6 +720,12 @@ def main() -> None:
         help="Run twice (trend filter ON vs OFF, deterministic) and compare",
     )
     parser.add_argument(
+        "--compare-features",
+        action="store_true",
+        help="A/B the debate proxy and adaptive weights over the three "
+        "reference windows (bear/bull/choppy), deterministic",
+    )
+    parser.add_argument(
         "--output",
         default="reports",
         help="Directory for the report (default reports/)",
@@ -565,6 +737,22 @@ def main() -> None:
     )
 
     settings = Settings()
+
+    # ------------------------------------------------------------------ #
+    # Feature comparison mode: fixed reference windows, no --start/--end
+    # ------------------------------------------------------------------ #
+    if args.compare_features:
+        run_feature_comparison(
+            asset=args.asset,
+            timeframe=args.timeframe,
+            settings=settings,
+            forecast_every=args.forecast_every,
+            out_dir=args.output,
+        )
+        return
+
+    if not args.start or not args.end:
+        parser.error("--start and --end are required (except with --compare-features)")
 
     # Build gateway: --deterministic/--compare use the raising gateway internally,
     # so only the LLM path needs a real (or no-llm) gateway.

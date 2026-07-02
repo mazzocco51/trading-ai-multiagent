@@ -9,6 +9,7 @@ from app.agents.base import AgentView
 from app.persistence.models import (
     AgentViewLog,
     BrokerState,
+    DebateLog,
     Decision,
     EquitySnapshot,
     Lesson,
@@ -79,6 +80,55 @@ def save_decision(
         session.add(log)
 
     return decision.id
+
+
+def save_debate(
+    session: Session,
+    decision_id: int | None,
+    asset: str,
+    bull_summary: str,
+    bear_summary: str,
+    transcript: list[dict],
+) -> None:
+    """Persist a bull-vs-bear debate transcript linked to a decision."""
+    session.add(
+        DebateLog(
+            decision_id=decision_id,
+            asset=asset,
+            timestamp=datetime.now(tz=UTC).isoformat(),
+            bull_summary=bull_summary,
+            bear_summary=bear_summary,
+            transcript_json=json.dumps(transcript),
+        )
+    )
+
+
+def get_recent_debates(session: Session, limit: int = 20) -> list[dict]:
+    """Return the most-recent debate transcripts as plain dicts."""
+    rows = (
+        session.query(DebateLog)
+        .order_by(DebateLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    results: list[dict] = []
+    for r in rows:
+        try:
+            transcript = json.loads(r.transcript_json)
+        except Exception:
+            transcript = []
+        results.append(
+            {
+                "id": r.id,
+                "decision_id": r.decision_id,
+                "asset": r.asset,
+                "timestamp": r.timestamp,
+                "bull_summary": r.bull_summary,
+                "bear_summary": r.bear_summary,
+                "transcript": transcript,
+            }
+        )
+    return results
 
 
 def save_equity_snapshot(
