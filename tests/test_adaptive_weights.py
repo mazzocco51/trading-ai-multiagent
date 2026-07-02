@@ -118,13 +118,20 @@ def _make_ohlcv(n: int, per_bar_vol: float) -> pd.DataFrame:
     return df
 
 
+def _base_off() -> Settings:
+    """Settings with both optional features disabled (pre-feature baseline)."""
+    s = Settings()
+    s.adaptive_weights_enabled = False
+    s.debate_enabled = False
+    return s
+
+
 def test_backtest_flag_off_identical():
+    """With the features off, the backtest is deterministic and reproducible."""
     df = _make_ohlcv(200, 0.01)
-    off = Settings()
-    off.adaptive_weights_enabled = False
-    a = run_backtest("BTC/USDT", "1h", df, off, MagicMock(), window=100,
+    a = run_backtest("BTC/USDT", "1h", df, _base_off(), MagicMock(), window=100,
                      deterministic=True, forecast_every=0)
-    b = run_backtest("BTC/USDT", "1h", df, Settings(), MagicMock(), window=100,
+    b = run_backtest("BTC/USDT", "1h", df, _base_off(), MagicMock(), window=100,
                      deterministic=True, forecast_every=0)
     assert a.summary() == b.summary()
     assert a.equity_curve == b.equity_curve
@@ -150,7 +157,7 @@ def test_backtest_adaptive_runs_high_vol_window():
     assert abs(sum(w.values()) - 1.0) < 1e-9
 
 
-def test_config_flags_default_off():
+def test_config_flags_default_on():
     s = Settings()
-    assert s.debate_enabled is False
-    assert s.adaptive_weights_enabled is False
+    assert s.debate_enabled is True
+    assert s.adaptive_weights_enabled is True
