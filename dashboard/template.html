@@ -6,22 +6,38 @@
 <title>Multi Agent Trading Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
+    /* IBM Plex: retro-computing lineage to match the CRT signature.
+       Sans carries the UI; Mono carries numerals, data and the CRT screen. */
+    --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-num: 'IBM Plex Mono', ui-monospace, monospace;
     --bg: #e3dccb;
     --surface: #f1ece0;
     --surface-2: #e9e2d2;
     --line: #d6ccb7;
+    --line-strong: #cdbfa4;
+    --dot-grid: rgba(90,72,40,.05);
+    --chart-grid: rgba(90,72,40,.08);
+    --bench: #b45309;
+    --coin-ink: #16181d;
+    /* fixed CRT hardware palette (identity element, not themed surfaces) */
+    --crt-case: #d9d2c2;
+    --crt-bezel: #c9bca1;
+    --crt-screen: #c3c5b7;
+    --crt-frame: #1d1e1c;
+    --crt-ink: #191a17;
+    --crt-sub: #33352e;
     --ink: #2c2f36;
-    --muted: #756e5d;
-    --faint: #a59c88;
-    --green: #1a8f63;
+    --muted: #5c5546;   /* 5.4:1 on --bg, 6.3:1 on --surface */
+    --faint: #665d4b;   /* 4.75:1 on --bg (AA floor for small text) */
+    --green: #0f6b4a;   /* 5.4:1 on --green-bg */
     --green-bg: #dcefe2;
-    --red: #c5483c;
+    --red: #a13428;     /* 5.3:1 on --red-bg */
     --red-bg: #f2ddd8;
-    --ai: #3163d6;
+    --ai: #2b53c0;      /* 5.6:1 on --ai-bg */
     --ai-bg: #e3e9f8;
     --sh-1: 0 1px 2px rgba(60,50,25,.07), 0 1px 3px rgba(60,50,25,.05);
     --sh-2: 0 4px 14px rgba(60,50,25,.10), 0 1px 4px rgba(60,50,25,.06);
@@ -30,51 +46,60 @@
   html, body { margin:0; padding:0; }
   body {
     color: var(--ink);
-    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
     background-color: var(--bg);
-    background-image: radial-gradient(rgba(90,72,40,.05) 1px, transparent 1px);
+    background-image: radial-gradient(var(--dot-grid) 1px, transparent 1px);
     background-size: 24px 24px;
     overflow-x: hidden;
   }
-  .num { font-variant-numeric: tabular-nums; font-feature-settings:"tnum"; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-feature-settings:"tnum"; }
   h1,h2,h3 { margin:0; letter-spacing:-.01em; font-weight:600; }
   .wrap { max-width:1180px; margin:0 auto; padding:26px 22px 60px; }
 
   /* old-Macintosh CRT header */
   .crt-wrap { margin-bottom:24px; }
-  .monitor { width:100%; background:#d9d2c2; border:2px solid #c9bca1; border-radius:20px; padding:16px 18px 20px; box-shadow:var(--sh-2); }
-  .screen { background:#c3c5b7; border:7px solid #1d1e1c; border-radius:16px; padding:20px 44px 22px; text-align:center; position:relative; overflow:hidden;
+  .monitor { width:100%; background:var(--crt-case); border:2px solid var(--crt-bezel); border-radius:20px; padding:16px 18px 20px; box-shadow:var(--sh-2); }
+  .screen { background:var(--crt-screen); border:7px solid var(--crt-frame); border-radius:16px; padding:20px 44px 22px; text-align:center; position:relative; overflow:hidden;
             box-shadow: inset 0 0 30px rgba(0,0,0,.30); }
   .screen::after { content:""; position:absolute; inset:0; pointer-events:none;
             background:
               repeating-linear-gradient(rgba(0,0,0,.10) 0 1px, transparent 1px 3px),
               radial-gradient(120% 90% at 50% 50%, transparent 60%, rgba(0,0,0,.16));
-            mix-blend-mode:multiply; animation:flicker 5s infinite steps(60); }
+            mix-blend-mode:multiply; }
   @keyframes flicker { 0%,100%{opacity:.92} 50%{opacity:1} 96%{opacity:.85} }
-  .screen .content { animation:flicker 5s infinite steps(60); }
-  .screen h1 { font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:clamp(1.1rem, 4vw, 1.875rem); line-height:1.15; letter-spacing:-.01em; color:#191a17;
+  .screen h1 { font-family:var(--font-num); font-weight:700; font-size:clamp(1.1rem, 4vw, 1.75rem); line-height:1.15; letter-spacing:-.01em; color:var(--crt-ink);
             text-shadow: .7px 0 rgba(150,0,0,.22), -.7px 0 rgba(0,90,150,.22), 0 0 1px rgba(0,0,0,.25); filter:blur(.25px); }
-  .screen .status { font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12px; letter-spacing:.07em; text-transform:uppercase; color:#33352e; margin-top:9px; display:inline-flex; align-items:center; gap:8px;
+  .screen .status { font-family:var(--font-num); font-weight:600; font-size:12px; letter-spacing:.07em; text-transform:uppercase; color:var(--crt-sub); margin-top:9px; display:inline-flex; align-items:center; gap:8px;
             text-shadow:.6px 0 rgba(150,0,0,.18), -.6px 0 rgba(0,90,150,.18); filter:blur(.2px); }
-  .dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 rgba(26,143,99,.45); animation:pulse 2s infinite; }
-  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(26,143,99,.4)} 70%{box-shadow:0 0 0 7px rgba(26,143,99,0)} 100%{box-shadow:0 0 0 0 rgba(26,143,99,0)} }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 color-mix(in srgb, var(--green) 45%, transparent); }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 color-mix(in srgb, var(--green) 40%, transparent)} 70%{box-shadow:0 0 0 7px transparent} 100%{box-shadow:0 0 0 0 transparent} }
   .sep { opacity:.6; }
 
+  /* Motion is opt-in: CRT flicker, pulse and hover lift only when the user allows it.
+     The static scanline texture on .screen::after stays in both modes. */
+  @media (prefers-reduced-motion: no-preference) {
+    .screen::after { animation:flicker 5s infinite steps(60); }
+    .dot { animation:pulse 2s infinite; }
+    .coin { transition:transform .16s; }
+    .coin:hover { transform:translateY(-2px); }
+  }
+
   .coins { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px; }
-  .coin { color:#fff; border-radius:16px; box-shadow:var(--sh-2); padding:16px 18px; min-height:112px; display:flex; flex-direction:column; justify-content:space-between; transition:transform .16s; }
-  .coin:hover { transform:translateY(-2px); }
+  /* Coin cards: vibrant brand backgrounds, uniform dark ink text on every card.
+     All brand colors are bright enough for #16181d at >=4.5:1. */
+  .coin { color:var(--coin-ink); border-radius:16px; box-shadow:var(--sh-2); padding:16px 18px; min-height:112px; display:flex; flex-direction:column; justify-content:space-between; }
   .coin .top { display:flex; align-items:center; gap:11px; }
-  .coin .sym { width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,.24); display:grid; place-items:center; font-weight:700; font-size:16px; color:#fff; }
+  .coin .sym { width:34px; height:34px; border-radius:50%; background:rgba(0,0,0,.10); display:grid; place-items:center; font-weight:700; font-size:16px; color:inherit; }
   .coin .name { font-weight:600; font-size:14px; }
-  .coin .pair { font-size:11px; color:rgba(255,255,255,.8); }
+  .coin .pair { font-size:11px; }
   .coin .price { font-size:24px; font-weight:700; }
-  .coin .chg { font-size:12.5px; font-weight:600; color:rgba(255,255,255,.92); }
-  .asset-tag { display:inline-block; padding:1px 5px; border-radius:4px; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:rgba(255,255,255,.22); color:rgba(255,255,255,.9); margin-left:4px; vertical-align:middle; }
+  .coin .chg { font-size:12.5px; font-weight:600; }
+  .asset-tag { display:inline-block; padding:1px 5px; border-radius:4px; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:rgba(255,255,255,.30); color:inherit; margin-left:4px; vertical-align:middle; }
 
   .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px; }
-  .card { background:var(--surface); border:2px solid #cdbfa4; border-radius:14px; box-shadow:var(--sh-1); }
+  .card { background:var(--surface); border:2px solid var(--line-strong); border-radius:14px; box-shadow:var(--sh-1); }
   .kpi { padding:15px 17px; }
   .kpi .label { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600; }
   .kpi .val { font-size:24px; font-weight:600; margin-top:6px; }
@@ -105,10 +130,24 @@
   .votes { display:flex; gap:6px; flex-wrap:wrap; }
   .vote { flex:1; min-width:44px; height:30px; border-radius:8px; display:grid; place-items:center; font-size:9px; font-weight:700; letter-spacing:.04em; border:1px solid var(--line); }
   .vote small { font-size:8.5px; opacity:.8; }
-  .v-long { background:var(--green-bg); color:var(--green); border-color:rgba(26,143,99,.25); }
-  .v-short { background:var(--red-bg); color:var(--red); border-color:rgba(197,72,60,.25); }
+  .v-long { background:var(--green-bg); color:var(--green); border-color:color-mix(in srgb, var(--green) 30%, transparent); }
+  .v-short { background:var(--red-bg); color:var(--red); border-color:color-mix(in srgb, var(--red) 30%, transparent); }
   .v-neutral { background:var(--surface-2); color:var(--faint); }
-  .why { font-size:11.5px; color:var(--muted); margin-top:10px; line-height:1.5; border-left:2px solid var(--ai-bg); padding-left:10px; }
+  .why { font-size:11.5px; color:var(--muted); margin-top:10px; line-height:1.5; background:var(--surface-2); border-radius:8px; padding:8px 11px; }
+
+  /* Keyboard/touch-accessible per-agent reasoning (title tooltips are hover-only) */
+  .agent-detail { margin-top:9px; }
+  .agent-detail summary { cursor:pointer; font-size:11.5px; font-weight:600; color:var(--muted); padding:6px 0; list-style-position:inside; user-select:none; }
+  .agent-detail summary:hover { color:var(--ink); }
+  .agent-detail summary:focus-visible { outline:2px solid var(--ai); outline-offset:2px; border-radius:4px; }
+  .agent-detail[open] summary { color:var(--ink); }
+  .agent-list { margin:4px 0 2px; padding:0 0 0 4px; list-style:none; }
+  .agent-list li { font-size:11.5px; line-height:1.55; color:var(--muted); padding:5px 0; border-bottom:1px dashed var(--line); }
+  .agent-list li:last-child { border-bottom:none; }
+  .agent-list .ag { font-weight:700; color:var(--ink); }
+  .agent-list .sig-long { color:var(--green); font-weight:600; }
+  .agent-list .sig-short { color:var(--red); font-weight:600; }
+  .agent-list .sig-neutral { color:var(--faint); font-weight:600; }
 
   .act { display:inline-block; padding:3px 10px; border-radius:8px; font-size:11px; font-weight:700; letter-spacing:.02em; }
   .act.buy { background:var(--green-bg); color:var(--green); }
@@ -138,7 +177,7 @@
   .scrollbox thead th { position:sticky; top:0; background:var(--surface-2); z-index:1; }
   .scrollbox::-webkit-scrollbar { width:9px; }
   .scrollbox::-webkit-scrollbar-thumb { background:var(--line); border-radius:6px; }
-  .scrollbox::-webkit-scrollbar-thumb:hover { background:#c7bca4; }
+  .scrollbox::-webkit-scrollbar-thumb:hover { background:var(--line-strong); }
   .scrollbox::-webkit-scrollbar-track { background:transparent; }
 
   footer { margin-top:22px; font-size:12px; color:var(--faint); text-align:center; }
@@ -200,7 +239,7 @@
     <div class="card panel layout-equity">
       <h3 class="h3row">Equity curve <span id="vsMarket" class="vsmkt">vs BTC&nbsp;·&nbsp;—</span></h3>
       <div class="hint">Account value over time · paper</div>
-      <div class="chart-box"><canvas id="equityChart"></canvas></div>
+      <div class="chart-box"><canvas id="equityChart" role="img" aria-label="Equity curve chart"></canvas></div>
     </div>
 
     <div class="card panel layout-consensus">
@@ -228,16 +267,34 @@
 <script>
 const DATA = __DATA_JSON__;
 const ASSET_CLASS = DATA.asset_classes || {};
+// Uniform dark ink text (#16181d) on every card, so all brand colors must stay
+// bright: BTC/SOL/AMZN/GOOGL are the exact brand hexes; ETH/MSFT/TSLA lightened
+// one step, AAPL rendered as Apple silver.
 const COIN = {
   "BTC/USDT": { sym:"₿", name:"Bitcoin",   c:"#f7941a", binance:"BTCUSDT" },
-  "ETH/USDT": { sym:"Ξ", name:"Ethereum",  c:"#5e6ef5", binance:"ETHUSDT" },
+  "ETH/USDT": { sym:"Ξ", name:"Ethereum",  c:"#6d7cf7", binance:"ETHUSDT" },
   "SOL/USDT": { sym:"◎", name:"Solana",    c:"#11bf8d", binance:"SOLUSDT" },
-  "AAPL":     { sym:"",  name:"Apple",     c:"#555555", binance:"" },
-  "MSFT":     { sym:"⊞", name:"Microsoft", c:"#0078d4", binance:"" },
+  "AAPL":     { sym:"",  name:"Apple",     c:"#aab1bb", binance:"" },
+  "MSFT":     { sym:"⊞", name:"Microsoft", c:"#2e9df8", binance:"" },
   "GOOGL":    { sym:"G", name:"Alphabet",  c:"#4285f4", binance:"" },
   "AMZN":     { sym:"a", name:"Amazon",    c:"#ff9900", binance:"" },
-  "TSLA":     { sym:"⚡", name:"Tesla",    c:"#cc0000", binance:"" },
+  "TSLA":     { sym:"⚡", name:"Tesla",    c:"#f04438", binance:"" },
 };
+// Single source for colors used in JS (chart etc.): read the CSS tokens so a
+// palette change in :root can never be bypassed by a stale hard-coded copy.
+const _css = getComputedStyle(document.documentElement);
+const TOK = {
+  ink:     _css.getPropertyValue("--ink").trim(),
+  muted:   _css.getPropertyValue("--muted").trim(),
+  faint:   _css.getPropertyValue("--faint").trim(),
+  ai:      _css.getPropertyValue("--ai").trim(),
+  grid:    _css.getPropertyValue("--chart-grid").trim(),
+  bench:   _css.getPropertyValue("--bench").trim(),
+  fontUI:  _css.getPropertyValue("--font-ui").trim(),
+  fontNum: _css.getPropertyValue("--font-num").trim(),
+};
+const hexA = (hex,a)=>{ const c=hex.replace("#",""); return `rgba(${parseInt(c.substr(0,2),16)},${parseInt(c.substr(2,2),16)},${parseInt(c.substr(4,2),16)},${a})`; };
+const esc = (s)=> String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const AGENTS = ["technical","forecast","sentiment","onchain","news"];
 const ALABEL = { technical:"TEC", forecast:"FOR", sentiment:"SEN", onchain:"CHN", news:"NWS" };
 const fmt = (n,d=2)=> (n==null||isNaN(n))?"—":Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -247,7 +304,7 @@ const live = {};
 
 function coins(){
   document.getElementById("coins").innerHTML = (DATA.assets||[]).map(a=>{
-    const m = COIN[a]||{sym:a.slice(0,3).toUpperCase(),name:a,c:"#888",binance:""};
+    const m = COIN[a]||{sym:a.slice(0,3).toUpperCase(),name:a,c:"#aab1bb",binance:""};
     const cls = ASSET_CLASS[a] || "crypto";
     const isCrypto = cls === "crypto" && m.binance;
     const pid = isCrypto ? "p-"+m.binance : "p-stock-"+a.replace(/\//g,"-");
@@ -285,16 +342,21 @@ function equity(){
   const h = DATA.equity_history||[];
   const labels = h.map(p=>new Date(p.t).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}));
   const vals = h.map(p=>p.balance);
-  const ctx = document.getElementById("equityChart").getContext("2d");
+  const cv = document.getElementById("equityChart");
+  // Text alternative for the canvas chart (WCAG 1.1.1)
+  const eqNow = DATA.equity ?? DATA.balance ?? DATA.initial_balance ?? 0;
+  cv.setAttribute("aria-label",
+    `Equity curve: started at $${fmt(DATA.initial_balance||10000,0)}, currently $${fmt(eqNow,0)} across ${h.length} data points.`);
+  const ctx = cv.getContext("2d");
   const g = ctx.createLinearGradient(0,0,0,286);
-  g.addColorStop(0,"rgba(49,99,214,.16)"); g.addColorStop(1,"rgba(49,99,214,0)");
+  g.addColorStop(0,hexA(TOK.ai,.16)); g.addColorStop(1,hexA(TOK.ai,0));
   _eqChart = new Chart(ctx,{ type:"line",
-    data:{ labels, datasets:[{ label:"Desk", data:vals, borderColor:"#3163d6", backgroundColor:g, borderWidth:2.5, fill:true, tension:.35, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:"#3163d6" }] },
+    data:{ labels, datasets:[{ label:"Desk", data:vals, borderColor:TOK.ai, backgroundColor:g, borderWidth:2.5, fill:true, tension:.35, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:TOK.ai }] },
     options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:true, position:"top", align:"end", labels:{boxWidth:12,boxHeight:2,color:"#756e5d",font:{size:11},usePointStyle:false} },
+      plugins:{ legend:{display:true, position:"top", align:"end", labels:{boxWidth:12,boxHeight:2,color:TOK.muted,font:{size:11,family:TOK.fontUI},usePointStyle:false} },
                 tooltip:{ callbacks:{ label:(c)=>" "+c.dataset.label+": $"+fmt(c.parsed.y) } } },
-      scales:{ x:{ grid:{color:"rgba(90,72,40,.08)"}, ticks:{maxTicksLimit:6,color:"#a59c88",font:{size:10}} },
-               y:{ grid:{color:"rgba(90,72,40,.08)"}, ticks:{color:"#a59c88",font:{size:10},callback:(v)=>"$"+fmt(v,0)} } } }
+      scales:{ x:{ grid:{color:TOK.grid}, ticks:{maxTicksLimit:6,color:TOK.faint,font:{size:10,family:TOK.fontNum}} },
+               y:{ grid:{color:TOK.grid}, ticks:{color:TOK.faint,font:{size:10,family:TOK.fontNum},callback:(v)=>"$"+fmt(v,0)} } } }
   });
   loadBenchmark(h);
 }
@@ -312,7 +374,7 @@ async function loadBenchmark(h){
     const init = DATA.initial_balance||10000;
     const c0 = nearest(t0);
     const bench = h.map(p=> init * nearest(new Date(p.t).getTime())/c0 );
-    _eqChart.data.datasets.push({ label:"BTC buy & hold", data:bench, borderColor:"#f7941a", borderWidth:1.8, borderDash:[5,4], fill:false, tension:.35, pointRadius:0, pointHoverRadius:4 });
+    _eqChart.data.datasets.push({ label:"BTC buy & hold", data:bench, borderColor:TOK.bench, borderWidth:1.8, borderDash:[5,4], fill:false, tension:.35, pointRadius:0, pointHoverRadius:4 });
     _eqChart.update();
     // Alpha: desk return minus market (BTC buy & hold) return, over the same period
     const deskRet = ((DATA.equity ?? DATA.balance ?? init)/init - 1)*100;
@@ -347,15 +409,25 @@ function consensus(){
       : AGENTS;
     const votes = applicableAgents.map(ag=>{
       const v = vmap[ag]; const sig = v? v.signal:"neutral"; const cf = v? Math.round(v.confidence*100):0;
-      const why = v && v.rationale ? v.rationale.replace(/"/g,"'") : "no data";
+      const why = v && v.rationale ? esc(v.rationale) : "no data";
       return `<div class="vote v-${sig}" title="${ag.toUpperCase()} · ${sig} ${cf}% — ${why}">${ALABEL[ag]}<small>${cf}%</small></div>`;
     }).join("");
+    // Same per-agent reasoning, but reachable by keyboard and touch (title="" is hover-only)
+    const agentRows = applicableAgents.map(ag=>{
+      const v = vmap[ag]; const sig = v? v.signal:"neutral"; const cf = v? Math.round(v.confidence*100):0;
+      const why = v && v.rationale ? esc(v.rationale) : "no data";
+      return `<li><span class="ag">${ALABEL[ag]}</span> <span class="sig-${sig}">${sig} · ${cf}%</span> — ${why}</li>`;
+    }).join("");
     const reason = (d.veto && d.veto_reason) ? d.veto_reason : (d.combined_rationale||"");
-    const safe = reason.replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const safe = esc(reason);
     return `<div class="decision">
       <div class="drow"><span class="asset">${a}</span><span class="act ${act}">${lbl}</span></div>
       <div class="conv"><div class="bar"><i style="width:${conv}%"></i></div><span class="pct">${conv}%</span></div>
       <div class="votes">${votes}</div>
+      <details class="agent-detail">
+        <summary>Agent reasoning</summary>
+        <ul class="agent-list">${agentRows}</ul>
+      </details>
       ${safe?`<div class="why">${safe}</div>`:''}
     </div>`;
   }).join("");
@@ -416,10 +488,14 @@ async function loadLive(){
   }catch(e){}
 }
 
-coins(); kpis(); equity(); consensus(); openTbl(); closedTbl();
-document.getElementById("updated").textContent =
-  "updated "+new Date(DATA.generated_at||Date.now()).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
-loadLive(); setInterval(loadLive, 30000);
+// Chart.js is deferred, so boot after DOMContentLoaded (deferred scripts are
+// guaranteed to have executed by then).
+window.addEventListener("DOMContentLoaded", () => {
+  coins(); kpis(); equity(); consensus(); openTbl(); closedTbl();
+  document.getElementById("updated").textContent =
+    "updated "+new Date(DATA.generated_at||Date.now()).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+  loadLive(); setInterval(loadLive, 30000);
+});
 </script>
 </body>
 </html>
