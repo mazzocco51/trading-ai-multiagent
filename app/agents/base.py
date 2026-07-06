@@ -39,8 +39,23 @@ class AgentView(BaseModel):
         return s
 
 
+def degraded_rationale(exc: Exception) -> str:
+    """Human-readable rationale for an agent failure — no raw URLs/tracebacks."""
+    from app.llm.gateway import LLMRateLimited
+
+    if isinstance(exc, LLMRateLimited):
+        return "temporaneamente non disponibile (rate-limited)"
+    return f"agent error: {exc}"
+
+
 class BaseAgent(ABC):
     name: str = "base"
 
     @abstractmethod
     def analyze(self, ctx: MarketContext) -> AgentView: ...
+
+    def cache_key(self, ctx: MarketContext) -> str | None:
+        """Intra-cycle cache key. Non-None when the view does not depend on the
+        asset (e.g. global Fear & Greed), so one LLM call can serve all assets.
+        """
+        return None

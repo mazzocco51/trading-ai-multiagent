@@ -12,8 +12,10 @@ from app.agents.debate import (
     DebateAgent,
     DebateTranscript,
     _extract_argument,
+    _extract_sides,
     apply_debate_proxy,
     debate_conviction_factor,
+    is_borderline,
 )
 from app.agents.portfolio_manager import PortfolioManagerAgent, TradeIdea
 from app.backtest import run_backtest
@@ -42,8 +44,8 @@ def _debate_gateway() -> MagicMock:
     gw = MagicMock()
     gw.complete.return_value = LLMResponse(
         provider="mock", model="mock",
-        content='{"argument": "mocked thesis"}',
-        parsed={"argument": "mocked thesis"},
+        content='{"bull": "bull thesis", "bear": "bear thesis"}',
+        parsed={"bull": "bull thesis", "bear": "bear thesis"},
     )
     return gw
 
@@ -78,21 +80,26 @@ def _make_ohlcv(n: int = 200) -> pd.DataFrame:
 
 def test_debate_produces_transcript():
     views = [_view("technical", "long", 0.8), _view("forecast", "short", 0.6)]
-    agent = DebateAgent(_debate_gateway(), rounds=1)
+    gw = _debate_gateway()
+    agent = DebateAgent(gw, rounds=1)
     transcript = agent.run(views, _ctx())
     assert isinstance(transcript, DebateTranscript)
     assert len(transcript.turns) == 2  # bull + bear, 1 round
     assert transcript.turns[0].role == "bull"
     assert transcript.turns[1].role == "bear"
-    assert transcript.bull_summary == "mocked thesis"
-    assert transcript.bear_summary == "mocked thesis"
+    assert transcript.bull_summary == "bull thesis"
+    assert transcript.bear_summary == "bear thesis"
+    # Combined prompt: both sides argued in a SINGLE LLM call
+    assert gw.complete.call_count == 1
 
 
 def test_debate_two_rounds():
-    agent = DebateAgent(_debate_gateway(), rounds=2)
+    gw = _debate_gateway()
+    agent = DebateAgent(gw, rounds=2)
     transcript = agent.run([_view("technical", "long", 0.8)], _ctx())
     assert len(transcript.turns) == 4
     assert [t.round for t in transcript.turns] == [1, 1, 2, 2]
+    assert gw.complete.call_count == 2  # one combined call per round
 
 
 def test_debate_rounds_clamped():
@@ -112,6 +119,31 @@ def test_extract_argument_variants():
     assert _extract_argument('```json\n{"argument": "abc"}\n```') == "abc"
     assert _extract_argument("plain text") == "plain text"
     assert len(_extract_argument("x" * 5000)) <= 900
+
+
+def test_extract_sides_variants():
+    assert _extract_sides('{"bull": "up", "bear": "down"}') == ("up", "down")
+    assert _extract_sides("", {"bull": "up", "bear": "down"}) == ("up", "down")
+    assert _extract_sides('```json\n{"bull": "up", "bear": "down"}\n```') == ("up", "down")
+    assert _extract_sides(
+        '{"bull_argument": "up", "bear_argument": "down"}'
+    ) == ("up", "down")
+    assert _extract_sides("not json") == ("", "")
+    bull, bear = _extract_sides('{"bull": "%s", "bear": "b"}' % ("x" * 5000))
+    assert len(bull) <= 900
+    assert bear == "b"
+
+
+def test_is_borderline_band():
+    # Strong one-sided consensus → not borderline → debate can be skipped
+    strong = [_view("technical", "long", 0.9), _view("forecast", "long", 0.9)]
+    assert not is_borderline(strong, WEIGHTS, low=0.05, high=0.35)
+    # Mixed/weak signal → borderline → debate should run
+    mixed = [_view("technical", "long", 0.6), _view("forecast", "short", 0.5)]
+    assert is_borderline(mixed, WEIGHTS, low=0.05, high=0.35)
+    # Fully neutral (score ~0) → below the band → skip
+    neutral = [_view("technical", "neutral", 0.5)]
+    assert not is_borderline(neutral, WEIGHTS, low=0.05, high=0.35)
 
 
 def test_pm_judge_receives_transcript():

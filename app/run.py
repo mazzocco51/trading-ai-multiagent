@@ -3,7 +3,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import time
+
+# Ensure emoji in the plain-language explanation print cleanly on Windows
+# consoles (cp1252 → UnicodeEncodeError). No-op on UTF-8 platforms.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 
 from sqlalchemy.orm import sessionmaker
 
@@ -29,7 +38,18 @@ def build_gateway() -> LLMGateway:
             providers.append(
                 OpenRouterProvider(settings.openrouter_api_key, settings.openrouter_model)
             )
-    return LLMGateway(providers, daily_limit=settings.llm_daily_request_limit)
+    return LLMGateway(
+        providers,
+        daily_limit=settings.llm_daily_request_limit,
+        rpm={
+            "gemini": settings.gemini_rpm,
+            "groq": settings.groq_rpm,
+            "openrouter": settings.openrouter_rpm,
+        },
+        max_retries=settings.llm_max_retries,
+        cooldown_seconds=settings.llm_cooldown_seconds,
+        max_backoff_wait=settings.llm_max_backoff_wait,
+    )
 
 
 def main() -> None:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
 
-from app.agents.base import AgentView, BaseAgent
+from app.agents.base import AgentView, BaseAgent, degraded_rationale
 from app.data.context import MarketContext
 from app.llm.gateway import LLMGateway
 
@@ -51,4 +52,9 @@ class NewsAgent(BaseAgent):
         except Exception as exc:
             logger.warning("NewsAgent failed: %s", exc)
             return AgentView(agent=self.name, asset=ctx.asset, signal="neutral", confidence=0.0,
-                             rationale=f"agent error: {exc}")
+                             rationale=degraded_rationale(exc))
+
+    def cache_key(self, ctx: MarketContext) -> str | None:
+        # The news feed is often shared between assets; same headlines → same view.
+        payload = json.dumps(ctx.news_headlines[:15], sort_keys=True, default=str)
+        return "news:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()

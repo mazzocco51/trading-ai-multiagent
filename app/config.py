@@ -35,10 +35,20 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="")
     groq_model: str = Field(default="llama-3.3-70b-versatile")
     openrouter_api_key: str = Field(default="")
-    openrouter_model: str = Field(default="meta-llama/llama-3.3-70b-instruct:free")
+    openrouter_model: str = Field(default="nvidia/nemotron-3-ultra-550b-a55b:free")
 
     # LLM daily budget guard (per provider)
     llm_daily_request_limit: int = Field(default=1400)
+
+    # Per-provider pacing (requests/minute, free-tier friendly). 0 disables pacing.
+    gemini_rpm: float = Field(default=15.0)
+    groq_rpm: float = Field(default=30.0)
+    openrouter_rpm: float = Field(default=20.0)
+    # 429 handling: cooldown when Retry-After is absent, retry passes when all
+    # providers are cooling down, cap on a single backoff wait.
+    llm_max_retries: int = Field(default=3)
+    llm_cooldown_seconds: float = Field(default=60.0)
+    llm_max_backoff_wait: float = Field(default=120.0)
 
     # Persistence
     database_url: str = Field(default="sqlite:///./paper_trading.db")
@@ -76,6 +86,11 @@ class Settings(BaseSettings):
     debate_enabled: bool = Field(default=True)
     debate_rounds: int = Field(default=1)          # 1-2 rounds bull+bear
     debate_max_penalty: float = Field(default=0.5)  # max conviction cut at full split
+    # Run the LLM debate only when the weighted signal score is borderline
+    # (|score| within [low, high]); saves LLM calls on clear-cut setups.
+    debate_only_when_borderline: bool = Field(default=False)
+    debate_borderline_low: float = Field(default=0.05)
+    debate_borderline_high: float = Field(default=0.35)
 
     # Regime-adaptive agent weights (default OFF, backward compatible).
     # High volatility → shift weight from technical to sentiment/news; calm → reverse.

@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 
-from app.agents.base import AgentView, BaseAgent
+from app.agents.base import AgentView, BaseAgent, degraded_rationale
 from app.data.context import MarketContext
 from app.llm.gateway import LLMGateway
 
@@ -56,4 +56,4 @@ class ForecastAgent(BaseAgent):
         except Exception as exc:
             logger.warning("ForecastAgent failed: %s", exc)
             return AgentView(agent=self.name, asset=ctx.asset, signal="neutral", confidence=0.0,
-                             rationale=f"agent error: {exc}")
+                             rationale=degraded_rationale(exc))

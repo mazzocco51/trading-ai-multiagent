@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.agents.adaptive_weights import adapt_weights, realized_volatility_pct
 from app.agents.agent_selector import get_agents_for_asset_class, get_weights_for_asset_class
 from app.agents.base import AgentView
-from app.agents.debate import DebateAgent, DebateTranscript
+from app.agents.debate import DebateAgent, DebateTranscript, is_borderline
 from app.agents.forecast_agent import ForecastAgent
 from app.agents.news_agent import NewsAgent
 from app.agents.onchain import OnChainAgent
@@ -94,6 +94,11 @@ def run_cycle(
     results: list[dict] = []
     registry = AssetRegistry(settings)
 
+    # Intra-cycle view cache: agents whose input is not asset-specific (global
+    # Fear & Greed, shared news feed) are evaluated once and reused across
+    # assets — key is (agent_name, agent.cache_key(ctx)).
+    view_cache: dict[tuple[str, str], AgentView] = {}
+
     for asset in settings.assets:
         logger.info("Processing asset: %s", asset)
 
@@ -174,7 +179,15 @@ def run_cycle(
                     )
                 else:
                     agent = AgentCls(gateway)  # type: ignore[call-arg]
+                cache_key = agent.cache_key(ctx)
+                if cache_key is not None and (agent.name, cache_key) in view_cache:
+                    cached = view_cache[(agent.name, cache_key)]
+                    logger.info("Reusing cached %s view for %s", agent.name, asset)
+                    views.append(cached.model_copy(update={"asset": asset}))
+                    continue
                 view = agent.analyze(ctx)
+                if cache_key is not None:
+                    view_cache[(agent.name, cache_key)] = view
                 views.append(view)
             except Exception as exc:
                 logger.warning(
@@ -224,13 +237,23 @@ def run_cycle(
         # ------------------------------------------------------------------ #
         debate: DebateTranscript | None = None
         if settings.debate_enabled and views:
-            try:
-                debate = DebateAgent(gateway, rounds=settings.debate_rounds).run(views, ctx)
-                if not debate.turns:
-                    debate = None  # both sides failed — judge without transcript
-            except Exception as exc:
-                logger.warning("Debate failed for %s: %s", asset, exc)
-                debate = None
+            run_debate = True
+            if settings.debate_only_when_borderline and not is_borderline(
+                views,
+                asset_weights,
+                low=settings.debate_borderline_low,
+                high=settings.debate_borderline_high,
+            ):
+                run_debate = False
+                logger.info("Debate skipped for %s: signal not borderline", asset)
+            if run_debate:
+                try:
+                    debate = DebateAgent(gateway, rounds=settings.debate_rounds).run(views, ctx)
+                    if not debate.turns:
+                        debate = None  # both sides failed — judge without transcript
+                except Exception as exc:
+                    logger.warning("Debate failed for %s: %s", asset, exc)
+                    debate = None
 
         # ------------------------------------------------------------------ #
         # 4. Portfolio Manager aggregates views into a TradeIdea
