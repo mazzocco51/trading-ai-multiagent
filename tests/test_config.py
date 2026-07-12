@@ -34,8 +34,8 @@ def test_agent_weights_sum_to_one():
 
 def test_llm_provider_order():
     s = Settings()
-    assert s.llm_provider_order[0] == "gemini"
-    assert len(s.llm_provider_order) >= 1
+    assert s.llm_provider_order[0] == "groq"
+    assert set(s.llm_provider_order) == {"groq", "gemini", "openrouter"}
 
 
 def test_override_via_env(monkeypatch):
