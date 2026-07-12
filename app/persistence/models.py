@@ -127,6 +127,11 @@ def init_db(database_url: str):
     """Create all tables and return the engine."""
     from sqlalchemy import Engine
 
-    engine: Engine = create_engine(database_url, echo=False)
+    engine: Engine = create_engine(
+        database_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
     Base.metadata.create_all(engine)
     return engine

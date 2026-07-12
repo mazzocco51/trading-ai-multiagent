@@ -260,7 +260,12 @@ def run_cycle(
         #    (acts as debate judge when a transcript is present)
         # ------------------------------------------------------------------ #
         pm = PortfolioManagerAgent(gateway, asset_weights)
-        lessons = get_recent_lessons(repo_session, limit=8)
+        try:
+            lessons = get_recent_lessons(repo_session, limit=8)
+        except Exception as exc:
+            logger.error("get_recent_lessons failed for %s: %s", asset, exc)
+            repo_session.rollback()
+            lessons = []
         idea = pm.aggregate(
             views, asset, ctx, open_position=open_position, lessons=lessons, debate=debate
         )
@@ -378,11 +383,13 @@ def run_cycle(
                 )
         except Exception as exc:
             logger.error("save_decision failed for %s: %s", asset, exc)
+            repo_session.rollback()
 
         try:
             save_equity_snapshot(repo_session, broker.get_balance())
         except Exception as exc:
             logger.error("save_equity_snapshot failed for %s: %s", asset, exc)
+            repo_session.rollback()
 
         results.append(
             {
@@ -416,5 +423,6 @@ def run_cycle(
                 broker.last_reflected_count = closed_count
         except Exception as exc:
             logger.warning("Reflection failed: %s", exc)
+            repo_session.rollback()
 
     return results

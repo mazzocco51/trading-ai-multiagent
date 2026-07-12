@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # LLM gateway — ordered list of providers to try
     llm_provider_order: Annotated[list[str], NoDecode] = Field(
-        default=["gemini", "groq", "openrouter"]
+        default=["groq", "gemini", "openrouter"]
     )
     gemini_api_key: str = Field(default="")
     gemini_model: str = Field(default="gemini-2.5-flash")
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # providers are cooling down, cap on a single backoff wait.
     llm_max_retries: int = Field(default=3)
     llm_cooldown_seconds: float = Field(default=60.0)
-    llm_max_backoff_wait: float = Field(default=120.0)
+    llm_max_backoff_wait: float = Field(default=45.0)
 
     # Persistence
     database_url: str = Field(default="sqlite:///./paper_trading.db")

@@ -14,6 +14,7 @@ try:
 except Exception:
     pass
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
 from app.broker.paper import PaperBroker
@@ -92,8 +93,24 @@ def main() -> None:
     while True:
         with SessionFactory() as session:
             results = run_cycle(settings, broker, gateway, session)
-            save_broker_state(session, broker.export_state())
-            session.commit()
+            state = broker.export_state()
+            try:
+                save_broker_state(session, state)
+                session.commit()
+            except SQLAlchemyError as exc:
+                _log.error(
+                    "Broker-state commit failed, retrying on a fresh connection: %s", exc
+                )
+                session.rollback()
+                engine.dispose()
+                try:
+                    with SessionFactory() as retry_session:
+                        save_broker_state(retry_session, state)
+                        retry_session.commit()
+                except SQLAlchemyError as exc2:
+                    _log.error(
+                        "Broker-state commit retry failed — continuing anyway: %s", exc2
+                    )
 
         for r in results:
             _log.info(
