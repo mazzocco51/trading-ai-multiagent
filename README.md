@@ -13,7 +13,7 @@
 
 It runs **fully autonomously in the cloud on a 100% free stack** (free LLM tiers, free Postgres, free CI/CD and hosting) and **never touches real money**.
 
-**🔗 Live dashboard → https://mazzocco51.github.io/trading-ai-multiagent/** — rebuilt and redeployed by the bot itself on every cycle.
+**🔗 Live dashboard ** rebuilt and redeployed by the bot itself on every cycle.
 
 [![Live dashboard](docs/dashboard.png)](https://mazzocco51.github.io/trading-ai-multiagent/)
 
