@@ -1,11 +1,9 @@
 name: trade-loop
 
 on:
-  schedule:
-    # Off-peak minutes (GitHub heavily throttles on-the-hour crons).
-    # Twice an hour to raise the odds the schedule actually fires.
-    - cron: '13,43 * * * *'
-  workflow_dispatch:        # manual trigger
+  # Project archived: automatic scheduling disabled. The live dashboard on
+  # GitHub Pages stays frozen at the last run. Trigger manually if ever needed.
+  workflow_dispatch:        # manual trigger only
 
 permissions:
   contents: read
